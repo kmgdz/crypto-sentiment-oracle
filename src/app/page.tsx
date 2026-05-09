@@ -1,9 +1,11 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { createClient, studionet } from "genlayer-js";
 
 const CONTRACT_ADDRESS = "0xe41097D3e22B5d10D1ec5D8e7f24c0E1A296f064";
-const RPC_URL = "https://studio.genlayer.com/api";
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
+
+const client = createClient({ network: studionet });
 
 const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }> = {
   bitcoin:  { desc: "The first and largest cryptocurrency by market cap.", symbol: "BTC", color: "#f97316" },
@@ -49,36 +51,13 @@ export default function Home() {
 
   const fetchSentiment = async (): Promise<string> => {
     try {
-      const res = await fetch(RPC_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "gen_call",
-          params: [{
-            to: CONTRACT_ADDRESS,
-            data: {
-              function: "get_sentiment",
-              args: [],
-              kwarg: {}
-            },
-            value: "0x0"
-          }, "latest"],
-          id: 1,
-        }),
+      const result = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: "get_sentiment",
+        args: [],
       });
-      const data = await res.json();
-      console.log("gen_call response:", JSON.stringify(data));
-      if (data.result?.data) {
-        const hex = data.result.data;
-        const text = decodeURIComponent(
-          hex.replace(/^0x/, "")
-            .match(/.{1,2}/g)!
-            .map((b: string) => "%" + b)
-            .join("")
-        ).replace(/"/g, "").trim();
-        if (text) return text;
-      }
+      console.log("fetchSentiment result:", result);
+      if (result) return String(result).replace(/"/g, "").trim();
       return "";
     } catch (e) {
       console.log("fetchSentiment error:", e);
@@ -88,34 +67,12 @@ export default function Home() {
 
   const fetchCoin = async (): Promise<string> => {
     try {
-      const res = await fetch(RPC_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "gen_call",
-          params: [{
-            to: CONTRACT_ADDRESS,
-            data: {
-              function: "get_coin",
-              args: [],
-              kwarg: {}
-            },
-            value: "0x0"
-          }, "latest"],
-          id: 2,
-        }),
+      const result = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: "get_coin",
+        args: [],
       });
-      const data = await res.json();
-      if (data.result?.data) {
-        const hex = data.result.data;
-        return decodeURIComponent(
-          hex.replace(/^0x/, "")
-            .match(/.{1,2}/g)!
-            .map((b: string) => "%" + b)
-            .join("")
-        ).replace(/"/g, "").trim();
-      }
+      if (result) return String(result).replace(/"/g, "").trim();
       return "";
     } catch { return ""; }
   };
@@ -153,47 +110,26 @@ export default function Home() {
         attempts++;
         setStatus(`🔄 AI validators analyzing... ${secs}s elapsed`);
 
-        try {
-          // Check tx receipt first
-          const txRes = await fetch(RPC_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              method: "eth_getTransactionByHash",
-              params: [hash],
-              id: 3,
-            }),
-          });
-          const txData2 = await txRes.json();
-          console.log("tx receipt:", JSON.stringify(txData2));
+        const newSentiment = await fetchSentiment();
+        const newCoin = await fetchCoin();
+        console.log("poll - sentiment:", newSentiment, "coin:", newCoin);
 
-          // If finalized, read result
-          if (txData2.result) {
-            const newSentiment = await fetchSentiment();
-            const newCoin = await fetchCoin();
-            console.log("sentiment:", newSentiment, "coin:", newCoin);
-            if (newSentiment !== "") {
-              setSentiment(newSentiment);
-              setAnalyzedCoin(newCoin || coin);
-              setStatus("✅ Consensus reached! Result verified on-chain.");
-              clearInterval(pollRef.current);
-              clearInterval(timerRef.current);
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (e) {
-          console.log("poll error:", e);
+        if (newSentiment !== "" && newCoin.toLowerCase() === coin.toLowerCase()) {
+          setSentiment(newSentiment);
+          setAnalyzedCoin(newCoin);
+          setStatus("✅ Consensus reached! Result verified on-chain.");
+          clearInterval(pollRef.current);
+          clearInterval(timerRef.current);
+          setLoading(false);
+          return;
         }
 
         if (attempts >= 36) {
           clearInterval(pollRef.current);
           clearInterval(timerRef.current);
-          const final = await fetchSentiment();
-          if (final) {
-            setSentiment(final);
-            setStatus("✅ Done! Result from chain.");
+          if (newSentiment) {
+            setSentiment(newSentiment);
+            setStatus("✅ Done!");
           } else {
             setStatus("⚠️ Click '📖 Read Latest Result' manually.");
           }
