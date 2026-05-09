@@ -17,28 +17,27 @@ Crypto Sentiment Oracle is a decentralized application that uses GenLayer's Inte
 ---
 
 ## Architecture
-┌─────────────────────────────────────────────────┐
-│  Layer 2 — CLIENT (Next.js + TypeScript)        │
-│  • Input coin name                              │
-│  • Display AI sentiment result                  │
-│  • Connected to GenLayer via RPC                │
-└─────────────────────────────────────────────────┘
-│
-┌─────────────────────────────────────────────────┐
-│  Layer 1 — PROTOCOL (GenLayer Optimistic Demo)  │
-│  • Validators fetch live CoinMarketCap data     │
-│  • AI analyzes sentiment via LLM                │
-│  • Consensus reached via prompt_comparative     │
-│  • Result stored permanently on-chain           │
-└─────────────────────────────────────────────────┘
-│
-┌─────────────────────────────────────────────────┐
-│  Layer 0 — CONTRACT (sentiment.py)              │
-│  • gl.nondet.web.get() — fetch live web data   │
-│  • gl.eq_principle.strict_eq() — deterministic │
-│  • gl.eq_principle.prompt_comparative() — AI   │
-│  • Stores: coin_name, sentiment                 │
-└─────────────────────────────────────────────────┘
+
+```
+Layer 2 — CLIENT
+Next.js 15 + TypeScript + Tailwind CSS
+- User inputs coin name
+- Displays AI sentiment result
+- Connected to GenLayer via RPC
+        ↓
+Layer 1 — PROTOCOL
+GenLayer Optimistic Democracy
+- 5 validators fetch live CoinMarketCap data
+- Each runs LLM analysis independently
+- Consensus reached via prompt_comparative
+- Result stored permanently on-chain
+        ↓
+Layer 0 — CONTRACT (sentiment.py)
+- gl.nondet.web.get() → fetch live web data
+- gl.eq_principle.strict_eq() → deterministic fetch
+- gl.eq_principle.prompt_comparative() → AI verdict
+- Stores: coin_name + sentiment on-chain
+```
 
 ## Tech Stack
 
