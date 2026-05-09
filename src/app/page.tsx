@@ -69,16 +69,34 @@ export default function Home() {
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
-        setStatus(`🔄 Waiting for consensus... (attempt ${attempts}/20)`);
-        const got = await readSentiment();
-        if (got) {
-          setStatus("✅ Result verified on-chain by GenLayer validators!");
-          clearInterval(poll);
-          setLoading(false);
-        }
+        setStatus(`🔄 Waiting for consensus... (attempt ${attempts}/20) — this takes 1-2 minutes`);
+
+        try {
+          const txRes = await fetch(RPC_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_getTransactionReceipt",
+              params: [hash],
+              id: 2,
+            }),
+          });
+          const txData = await txRes.json();
+
+          if (txData.result && txData.result.status) {
+            const got = await readSentiment();
+            if (got) {
+              setStatus("✅ Result verified on-chain by GenLayer validators!");
+              clearInterval(poll);
+              setLoading(false);
+            }
+          }
+        } catch {}
+
         if (attempts >= 20) {
           clearInterval(poll);
-          setStatus("⚠️ Taking longer than usual. Click 'Read Latest Result' manually.");
+          setStatus("⚠️ Click '📖 Read Latest Result' to see the answer manually.");
           setLoading(false);
         }
       }, 8000);
