@@ -1,11 +1,14 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { createClient, studionet } from "genlayer-js";
+import { useState, useEffect, useCallback } from "react";
+import { createClient, chains, createAccount } from "genlayer-js";
 
-const CONTRACT_ADDRESS = "0xe41097D3e22B5d10D1ec5D8e7f24c0E1A296f064";
+const CONTRACT_ADDRESS = "0xe41097D3e22B5d10D1ec5D8e7f24c0E1A296f064" as `0x${string}`;
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
 
-const client = createClient({ network: studionet });
+const client = createClient({
+  chain: chains.studionet,
+  endpoint: "https://studio.genlayer.com/api",
+});
 
 const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }> = {
   bitcoin:  { desc: "The first and largest cryptocurrency by market cap.", symbol: "BTC", color: "#f97316" },
@@ -21,60 +24,48 @@ const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }>
 export default function Home() {
   const [coin, setCoin] = useState("");
   const [sentiment, setSentiment] = useState("");
+  const [analyzedCoin, setAnalyzedCoin] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
-  const [account, setAccount] = useState("");
   const [txHash, setTxHash] = useState("");
   const [showHow, setShowHow] = useState(false);
-  const [analyzedCoin, setAnalyzedCoin] = useState("");
   const [elapsed, setElapsed] = useState(0);
-  const pollRef = useRef<any>(null);
-  const timerRef = useRef<any>(null);
 
-  useEffect(() => {
-    return () => {
-      clearInterval(pollRef.current);
-      clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const connectWallet = async () => {
+  const fetchSentiment = useCallback(async () => {
     try {
-      const eth = (window as any).ethereum;
-      if (!eth) { alert("Please install MetaMask!"); return; }
-      const accounts = await eth.request({ method: "eth_requestAccounts" });
-      setAccount(accounts[0]);
-    } catch {
-      alert("Wallet connection failed");
-    }
-  };
-
-  const fetchSentiment = async (): Promise<string> => {
-    try {
-      const result = await client.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+      const s = await client.readContract({
+        address: CONTRACT_ADDRESS,
         functionName: "get_sentiment",
         args: [],
       });
-      console.log("fetchSentiment result:", result);
-      if (result) return String(result).replace(/"/g, "").trim();
-      return "";
-    } catch (e) {
-      console.log("fetchSentiment error:", e);
-      return "";
-    }
-  };
-
-  const fetchCoin = async (): Promise<string> => {
-    try {
-      const result = await client.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+      const c = await client.readContract({
+        address: CONTRACT_ADDRESS,
         functionName: "get_coin",
         args: [],
       });
-      if (result) return String(result).replace(/"/g, "").trim();
-      return "";
-    } catch { return ""; }
+      console.log("readContract sentiment:", s, "coin:", c);
+      return {
+        sentiment: String(s || "").replace(/"/g, "").trim(),
+        coin: String(c || "").replace(/"/g, "").trim(),
+      };
+    } catch (e) {
+      console.error("readContract error:", e);
+      return { sentiment: "", coin: "" };
+    }
+  }, []);
+
+  const handleRead = async () => {
+    setLoading(true);
+    setStatus("📖 Reading from chain...");
+    const { sentiment: s, coin: c } = await fetchSentiment();
+    if (s) {
+      setSentiment(s);
+      setAnalyzedCoin(c);
+      setStatus("✅ Done!");
+    } else {
+      setStatus("⚠️ No result yet. Try again in a moment.");
+    }
+    setLoading(false);
   };
 
   const analyzeSentiment = async () => {
@@ -84,80 +75,51 @@ export default function Home() {
     setTxHash("");
     setElapsed(0);
     setAnalyzedCoin(coin);
-    setStatus("⏳ Sending transaction to GenLayer...");
+    setStatus("⏳ Sending transaction...");
 
     try {
-      const methodData = JSON.stringify({ method: "analyze_sentiment", args: [coin] });
-      const txData = "0x" + Array.from(new TextEncoder().encode(methodData))
-        .map(b => b.toString(16).padStart(2, "0")).join("");
+      // Use createAccount() like Aequitas does
+      const account = createAccount();
 
-      const hash = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{ from: account, to: CONTRACT_ADDRESS, data: txData, gas: "0x30D40" }],
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: "analyze_sentiment",
+        args: [coin],
+        account,
+        value: BigInt(0),
       });
 
-      setTxHash(hash);
-      setStatus("✅ Transaction sent! AI validators are analyzing...");
+      setTxHash(String(hash));
+      setStatus("✅ Transaction sent! Waiting for AI consensus...");
 
+      // Wait for receipt like Aequitas does
       let secs = 0;
-      timerRef.current = setInterval(() => {
-        secs++;
-        setElapsed(secs);
-      }, 1000);
+      const timer = setInterval(() => { secs++; setElapsed(secs); }, 1000);
 
-      let attempts = 0;
-      pollRef.current = setInterval(async () => {
-        attempts++;
-        setStatus(`🔄 AI validators analyzing... ${secs}s elapsed`);
+      setStatus("🔄 Waiting for validators to reach consensus...");
 
-        const newSentiment = await fetchSentiment();
-        const newCoin = await fetchCoin();
-        console.log("poll - sentiment:", newSentiment, "coin:", newCoin);
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      clearInterval(timer);
 
-        if (newSentiment !== "" && newCoin.toLowerCase() === coin.toLowerCase()) {
-          setSentiment(newSentiment);
-          setAnalyzedCoin(newCoin);
-          setStatus("✅ Consensus reached! Result verified on-chain.");
-          clearInterval(pollRef.current);
-          clearInterval(timerRef.current);
-          setLoading(false);
-          return;
-        }
+      console.log("receipt:", receipt);
+      setStatus("✅ Consensus reached! Reading result...");
 
-        if (attempts >= 36) {
-          clearInterval(pollRef.current);
-          clearInterval(timerRef.current);
-          if (newSentiment) {
-            setSentiment(newSentiment);
-            setStatus("✅ Done!");
-          } else {
-            setStatus("⚠️ Click '📖 Read Latest Result' manually.");
-          }
-          setLoading(false);
-        }
-      }, 5000);
+      // Read result after receipt
+      const { sentiment: s, coin: c } = await fetchSentiment();
+      if (s) {
+        setSentiment(s);
+        setAnalyzedCoin(c || coin);
+        setStatus("✅ Result verified on-chain by GenLayer validators!");
+      } else {
+        setStatus("⚠️ Transaction done. Click '📖 Read Latest Result'.");
+      }
 
     } catch (err: any) {
+      console.error("writeContract error:", err);
       setStatus("❌ " + (err.message || "Transaction failed"));
-      clearInterval(timerRef.current);
+    } finally {
       setLoading(false);
     }
-  };
-
-  const handleRead = async () => {
-    setLoading(true);
-    setStatus("📖 Reading from chain...");
-    const s = await fetchSentiment();
-    const c = await fetchCoin();
-    console.log("manual read - sentiment:", s, "coin:", c);
-    if (s) {
-      setSentiment(s);
-      setAnalyzedCoin(c || coin);
-      setStatus("✅ Done!");
-    } else {
-      setStatus("⚠️ No result yet. Try again in a moment.");
-    }
-    setLoading(false);
   };
 
   const getColor = () => {
@@ -191,110 +153,95 @@ export default function Home() {
           </button>
           {showHow && (
             <div style={{ marginTop: "12px", color: "#9ca3af", fontSize: "0.85rem", lineHeight: "1.8" }}>
-              <p>1️⃣ <strong style={{ color: "white" }}>You submit</strong> a coin name — signs a real on-chain transaction.</p>
+              <p>1️⃣ <strong style={{ color: "white" }}>You submit</strong> a coin name — sends a real transaction to GenLayer.</p>
               <p>2️⃣ <strong style={{ color: "white" }}>GenLayer fetches</strong> live data from CoinMarketCap directly on-chain.</p>
-              <p>3️⃣ <strong style={{ color: "white" }}>5 AI validators</strong> independently analyze the data with LLMs.</p>
+              <p>3️⃣ <strong style={{ color: "white" }}>5 AI validators</strong> independently analyze with LLMs and vote.</p>
               <p>4️⃣ <strong style={{ color: "white" }}>Consensus reached</strong> via GenLayer's Optimistic Democracy.</p>
               <p>5️⃣ <strong style={{ color: "white" }}>Result stored permanently</strong> on-chain — Bullish / Bearish / Neutral.</p>
             </div>
           )}
         </div>
 
-        {!account ? (
-          <div style={{ textAlign: "center", padding: "40px" }}>
-            <p style={{ color: "#9ca3af", marginBottom: "20px" }}>Connect your wallet to analyze crypto sentiment on-chain</p>
-            <button onClick={connectWallet}
-              style={{ background: "#7c3aed", color: "white", border: "none", borderRadius: "12px", padding: "14px 32px", fontSize: "1rem", fontWeight: "600", cursor: "pointer" }}>
-              🦊 Connect Wallet
-            </button>
+        <div style={{ background: "#111827", borderRadius: "16px", padding: "24px", marginBottom: "16px", border: "1px solid #1f2937" }}>
+          <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "8px" }}>
+            Enter a cryptocurrency name
+          </label>
+          <input
+            type="text"
+            value={coin}
+            onChange={(e) => setCoin(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && analyzeSentiment()}
+            placeholder="Bitcoin, Ethereum, Solana..."
+            style={{ width: "100%", background: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "12px", padding: "12px 16px", fontSize: "1rem", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
+          />
+          <button onClick={analyzeSentiment} disabled={loading || !coin}
+            style={{ width: "100%", background: loading || !coin ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin ? "not-allowed" : "pointer", marginBottom: "8px" }}>
+            {loading ? `⏳ Analyzing... ${elapsed}s` : "⚡ Analyze Sentiment On-Chain"}
+          </button>
+          <button onClick={handleRead} disabled={loading}
+            style={{ width: "100%", background: "transparent", color: "#9ca3af", border: "1px solid #374151", borderRadius: "12px", padding: "10px", fontSize: "0.9rem", cursor: "pointer" }}>
+            📖 Read Latest Result
+          </button>
+        </div>
+
+        {status && (
+          <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", color: "#9ca3af", fontSize: "0.85rem" }}>
+            {status}
           </div>
-        ) : (
-          <>
-            <div style={{ background: "#111827", borderRadius: "16px", padding: "24px", marginBottom: "16px", border: "1px solid #1f2937" }}>
-              <p style={{ color: "#6b7280", fontSize: "0.75rem", marginBottom: "16px" }}>
-                🟢 Connected: {account.slice(0, 6)}...{account.slice(-4)}
-              </p>
-              <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "8px" }}>
-                Enter a cryptocurrency name
-              </label>
-              <input
-                type="text"
-                value={coin}
-                onChange={(e) => setCoin(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && analyzeSentiment()}
-                placeholder="Bitcoin, Ethereum, Solana..."
-                style={{ width: "100%", background: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "12px", padding: "12px 16px", fontSize: "1rem", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
-              />
-              <button onClick={analyzeSentiment} disabled={loading || !coin}
-                style={{ width: "100%", background: loading || !coin ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin ? "not-allowed" : "pointer", marginBottom: "8px" }}>
-                {loading ? `⏳ Analyzing... ${elapsed}s` : "⚡ Analyze Sentiment On-Chain"}
-              </button>
-              <button onClick={handleRead} disabled={loading}
-                style={{ width: "100%", background: "transparent", color: "#9ca3af", border: "1px solid #374151", borderRadius: "12px", padding: "10px", fontSize: "0.9rem", cursor: "pointer" }}>
-                📖 Read Latest Result
-              </button>
+        )}
+
+        {txHash && (
+          <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", fontSize: "0.8rem" }}>
+            <p style={{ color: "#6b7280", marginBottom: "4px" }}>🔗 Transaction Hash:</p>
+            <a href={EXPLORER_URL + txHash} target="_blank" rel="noopener noreferrer"
+              style={{ color: "#60a5fa", wordBreak: "break-all", textDecoration: "none" }}>
+              {txHash} ↗
+            </a>
+          </div>
+        )}
+
+        {sentiment && (
+          <div style={{ background: "#111827", borderRadius: "16px", padding: "28px", border: `1px solid ${getColor()}44`, marginBottom: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", paddingBottom: "16px", borderBottom: "1px solid #1f2937" }}>
+              <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: coinInfo?.color || "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", fontWeight: "bold" }}>
+                {coinInfo?.symbol?.[0] || analyzedCoin[0]?.toUpperCase()}
+              </div>
+              <div>
+                <p style={{ fontWeight: "bold", fontSize: "1.1rem", textTransform: "capitalize" }}>{analyzedCoin}</p>
+                {coinInfo && <p style={{ color: "#9ca3af", fontSize: "0.8rem" }}>{coinInfo.symbol} • {coinInfo.desc}</p>}
+              </div>
             </div>
 
-            {status && (
-              <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", color: "#9ca3af", fontSize: "0.85rem" }}>
-                {status}
+            <div style={{ textAlign: "center", marginBottom: "20px" }}>
+              <p style={{ color: "#9ca3af", fontSize: "0.8rem", marginBottom: "8px" }}>AI SENTIMENT VERDICT</p>
+              <div style={{ fontSize: "3rem", fontWeight: "bold", color: getColor() }}>
+                {getEmoji()} {sentiment}
               </div>
-            )}
+            </div>
 
-            {txHash && (
-              <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", fontSize: "0.8rem" }}>
-                <p style={{ color: "#6b7280", marginBottom: "4px" }}>🔗 Transaction Hash:</p>
-                <a href={EXPLORER_URL + txHash} target="_blank" rel="noopener noreferrer"
-                  style={{ color: "#60a5fa", wordBreak: "break-all", textDecoration: "none" }}>
-                  {txHash} ↗
-                </a>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
+                <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>DATA SOURCE</p>
+                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>CoinMarketCap</p>
               </div>
-            )}
-
-            {sentiment && (
-              <div style={{ background: "#111827", borderRadius: "16px", padding: "28px", border: `1px solid ${getColor()}44`, marginBottom: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", paddingBottom: "16px", borderBottom: "1px solid #1f2937" }}>
-                  <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: coinInfo?.color || "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", fontWeight: "bold" }}>
-                    {coinInfo?.symbol?.[0] || analyzedCoin[0]?.toUpperCase()}
-                  </div>
-                  <div>
-                    <p style={{ fontWeight: "bold", fontSize: "1.1rem", textTransform: "capitalize" }}>{analyzedCoin}</p>
-                    {coinInfo && <p style={{ color: "#9ca3af", fontSize: "0.8rem" }}>{coinInfo.symbol} • {coinInfo.desc}</p>}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: "center", marginBottom: "20px" }}>
-                  <p style={{ color: "#9ca3af", fontSize: "0.8rem", marginBottom: "8px" }}>AI SENTIMENT VERDICT</p>
-                  <div style={{ fontSize: "3rem", fontWeight: "bold", color: getColor() }}>
-                    {getEmoji()} {sentiment}
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
-                    <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>DATA SOURCE</p>
-                    <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>CoinMarketCap</p>
-                  </div>
-                  <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
-                    <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>VALIDATORS</p>
-                    <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>5 AI Nodes</p>
-                  </div>
-                  <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
-                    <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>NETWORK</p>
-                    <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>GenLayer Testnet</p>
-                  </div>
-                  <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
-                    <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>METHOD</p>
-                    <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>Optimistic AI</p>
-                  </div>
-                </div>
-
-                <p style={{ color: "#6b7280", fontSize: "0.72rem", textAlign: "center", marginTop: "16px" }}>
-                  ✅ Verified by 5 GenLayer AI validators on-chain
-                </p>
+              <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
+                <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>VALIDATORS</p>
+                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>5 AI Nodes</p>
               </div>
-            )}
-          </>
+              <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
+                <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>NETWORK</p>
+                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>GenLayer Testnet</p>
+              </div>
+              <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
+                <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>METHOD</p>
+                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>Optimistic AI</p>
+              </div>
+            </div>
+
+            <p style={{ color: "#6b7280", fontSize: "0.72rem", textAlign: "center", marginTop: "16px" }}>
+              ✅ Verified by 5 GenLayer AI validators on-chain
+            </p>
+          </div>
         )}
 
         <p style={{ textAlign: "center", color: "#4b5563", fontSize: "0.75rem", marginTop: "20px" }}>
