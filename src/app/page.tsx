@@ -3,7 +3,7 @@ import { useState } from "react";
 
 const CONTRACT_ADDRESS = "0xe41097D3e22B5d10D1ec5D8e7f24c0E1A296f064";
 const RPC_URL = "https://studio.genlayer.com/api";
-const EXPLORER_URL = "https://studio.genlayer.com/transactions/";
+const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
 
 export default function Home() {
   const [coin, setCoin] = useState("");
@@ -66,7 +66,6 @@ export default function Home() {
       setTxHash(hash);
       setStatus("✅ Transaction submitted! AI validators are reaching consensus...");
 
-      // Poll every 8 seconds for up to 3 minutes
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
@@ -183,7 +182,7 @@ export default function Home() {
             {/* TX Hash */}
             {txHash && (
               <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", fontSize: "0.8rem" }}>
-                <p style={{ color: "#6b7280", marginBottom: "4px" }}>Transaction Hash:</p>
+                <p style={{ color: "#6b7280", marginBottom: "4px" }}>🔗 Transaction Hash:</p>
                 <a href={EXPLORER_URL + txHash} target="_blank" rel="noopener noreferrer"
                   style={{ color: "#60a5fa", wordBreak: "break-all", textDecoration: "none" }}>
                   {txHash} ↗
