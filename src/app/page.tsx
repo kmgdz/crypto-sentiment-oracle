@@ -19,7 +19,6 @@ const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }>
 export default function Home() {
   const [coin, setCoin] = useState("");
   const [sentiment, setSentiment] = useState("");
-  const [prevSentiment, setPrevSentiment] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [account, setAccount] = useState("");
@@ -56,16 +55,35 @@ export default function Home() {
         body: JSON.stringify({
           jsonrpc: "2.0",
           method: "gen_call",
-          params: [{ to: CONTRACT_ADDRESS, data: { method: "get_sentiment", args: [] } }, "latest"],
+          params: [{
+            to: CONTRACT_ADDRESS,
+            data: {
+              function: "get_sentiment",
+              args: [],
+              kwarg: {}
+            },
+            value: "0x0"
+          }, "latest"],
           id: 1,
         }),
       });
       const data = await res.json();
-      if (data.result && data.result !== '""' && data.result !== "") {
-        return data.result.replace(/"/g, "").trim();
+      console.log("gen_call response:", JSON.stringify(data));
+      if (data.result?.data) {
+        const hex = data.result.data;
+        const text = decodeURIComponent(
+          hex.replace(/^0x/, "")
+            .match(/.{1,2}/g)!
+            .map((b: string) => "%" + b)
+            .join("")
+        ).replace(/"/g, "").trim();
+        if (text) return text;
       }
-    } catch {}
-    return "";
+      return "";
+    } catch (e) {
+      console.log("fetchSentiment error:", e);
+      return "";
+    }
   };
 
   const fetchCoin = async (): Promise<string> => {
@@ -76,14 +94,30 @@ export default function Home() {
         body: JSON.stringify({
           jsonrpc: "2.0",
           method: "gen_call",
-          params: [{ to: CONTRACT_ADDRESS, data: { method: "get_coin", args: [] } }, "latest"],
-          id: 3,
+          params: [{
+            to: CONTRACT_ADDRESS,
+            data: {
+              function: "get_coin",
+              args: [],
+              kwarg: {}
+            },
+            value: "0x0"
+          }, "latest"],
+          id: 2,
         }),
       });
       const data = await res.json();
-      if (data.result) return data.result.replace(/"/g, "").trim();
-    } catch {}
-    return "";
+      if (data.result?.data) {
+        const hex = data.result.data;
+        return decodeURIComponent(
+          hex.replace(/^0x/, "")
+            .match(/.{1,2}/g)!
+            .map((b: string) => "%" + b)
+            .join("")
+        ).replace(/"/g, "").trim();
+      }
+      return "";
+    } catch { return ""; }
   };
 
   const analyzeSentiment = async () => {
@@ -93,12 +127,7 @@ export default function Home() {
     setTxHash("");
     setElapsed(0);
     setAnalyzedCoin(coin);
-
-    // Save current sentiment to detect change
-    const current = await fetchSentiment();
-    setPrevSentiment(current);
-
-    setStatus("⏳ Sending transaction...");
+    setStatus("⏳ Sending transaction to GenLayer...");
 
     try {
       const methodData = JSON.stringify({ method: "analyze_sentiment", args: [coin] });
@@ -111,46 +140,63 @@ export default function Home() {
       });
 
       setTxHash(hash);
-      setStatus("✅ Transaction sent! Waiting for AI consensus...");
+      setStatus("✅ Transaction sent! AI validators are analyzing...");
 
-      // Start elapsed timer
       let secs = 0;
       timerRef.current = setInterval(() => {
         secs++;
         setElapsed(secs);
       }, 1000);
 
-      // Poll every 5 seconds — detect when coin AND sentiment both change
       let attempts = 0;
       pollRef.current = setInterval(async () => {
         attempts++;
-
-        const newCoin = await fetchCoin();
-        const newSentiment = await fetchSentiment();
-
-        // Result is new when the coin matches what we submitted
-        if (
-          newCoin.toLowerCase() === coin.toLowerCase() &&
-          newSentiment !== "" &&
-          newSentiment !== current
-        ) {
-          setSentiment(newSentiment);
-          setStatus("✅ Consensus reached! Result verified on-chain.");
-          clearInterval(pollRef.current);
-          clearInterval(timerRef.current);
-          setLoading(false);
-          return;
-        }
-
         setStatus(`🔄 AI validators analyzing... ${secs}s elapsed`);
 
-        if (attempts >= 36) { // 3 minutes max
+        try {
+          // Check tx receipt first
+          const txRes = await fetch(RPC_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_getTransactionByHash",
+              params: [hash],
+              id: 3,
+            }),
+          });
+          const txData2 = await txRes.json();
+          console.log("tx receipt:", JSON.stringify(txData2));
+
+          // If finalized, read result
+          if (txData2.result) {
+            const newSentiment = await fetchSentiment();
+            const newCoin = await fetchCoin();
+            console.log("sentiment:", newSentiment, "coin:", newCoin);
+            if (newSentiment !== "") {
+              setSentiment(newSentiment);
+              setAnalyzedCoin(newCoin || coin);
+              setStatus("✅ Consensus reached! Result verified on-chain.");
+              clearInterval(pollRef.current);
+              clearInterval(timerRef.current);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.log("poll error:", e);
+        }
+
+        if (attempts >= 36) {
           clearInterval(pollRef.current);
           clearInterval(timerRef.current);
-          // Try one last read
           const final = await fetchSentiment();
-          if (final) setSentiment(final);
-          setStatus("⚠️ Done waiting. Showing latest on-chain result.");
+          if (final) {
+            setSentiment(final);
+            setStatus("✅ Done! Result from chain.");
+          } else {
+            setStatus("⚠️ Click '📖 Read Latest Result' manually.");
+          }
           setLoading(false);
         }
       }, 5000);
@@ -167,8 +213,14 @@ export default function Home() {
     setStatus("📖 Reading from chain...");
     const s = await fetchSentiment();
     const c = await fetchCoin();
-    if (s) { setSentiment(s); setAnalyzedCoin(c); }
-    setStatus("✅ Done!");
+    console.log("manual read - sentiment:", s, "coin:", c);
+    if (s) {
+      setSentiment(s);
+      setAnalyzedCoin(c || coin);
+      setStatus("✅ Done!");
+    } else {
+      setStatus("⚠️ No result yet. Try again in a moment.");
+    }
     setLoading(false);
   };
 
@@ -191,13 +243,11 @@ export default function Home() {
     <div style={{ minHeight: "100vh", background: "#030712", color: "white", fontFamily: "sans-serif", padding: "20px" }}>
       <div style={{ maxWidth: "600px", margin: "0 auto", paddingTop: "40px" }}>
 
-        {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "40px" }}>
           <h1 style={{ fontSize: "2.2rem", fontWeight: "bold", marginBottom: "8px" }}>🔮 Crypto Sentiment Oracle</h1>
           <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>Powered by GenLayer AI Consensus • On-Chain Results</p>
         </div>
 
-        {/* How it works */}
         <div style={{ background: "#111827", borderRadius: "12px", padding: "16px", marginBottom: "20px", border: "1px solid #1f2937" }}>
           <button onClick={() => setShowHow(!showHow)}
             style={{ background: "none", border: "none", color: "#60a5fa", cursor: "pointer", fontSize: "0.9rem", fontWeight: "600", width: "100%", textAlign: "left" }}>
@@ -249,14 +299,12 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Status */}
             {status && (
               <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", color: "#9ca3af", fontSize: "0.85rem" }}>
                 {status}
               </div>
             )}
 
-            {/* TX Hash */}
             {txHash && (
               <div style={{ background: "#111827", borderRadius: "12px", padding: "12px 16px", marginBottom: "16px", border: "1px solid #1f2937", fontSize: "0.8rem" }}>
                 <p style={{ color: "#6b7280", marginBottom: "4px" }}>🔗 Transaction Hash:</p>
@@ -267,11 +315,8 @@ export default function Home() {
               </div>
             )}
 
-            {/* Result */}
             {sentiment && (
               <div style={{ background: "#111827", borderRadius: "16px", padding: "28px", border: `1px solid ${getColor()}44`, marginBottom: "16px" }}>
-                
-                {/* Coin Info */}
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", paddingBottom: "16px", borderBottom: "1px solid #1f2937" }}>
                   <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: coinInfo?.color || "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem", fontWeight: "bold" }}>
                     {coinInfo?.symbol?.[0] || analyzedCoin[0]?.toUpperCase()}
@@ -282,7 +327,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Sentiment */}
                 <div style={{ textAlign: "center", marginBottom: "20px" }}>
                   <p style={{ color: "#9ca3af", fontSize: "0.8rem", marginBottom: "8px" }}>AI SENTIMENT VERDICT</p>
                   <div style={{ fontSize: "3rem", fontWeight: "bold", color: getColor() }}>
@@ -290,7 +334,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Details */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                   <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
                     <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>DATA SOURCE</p>
