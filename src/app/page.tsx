@@ -15,7 +15,6 @@ export default function Home() {
     setLoading(true);
     setError("");
     setSentiment("");
-
     try {
       const response = await fetch(RPC_URL, {
         method: "POST",
@@ -23,106 +22,80 @@ export default function Home() {
         body: JSON.stringify({
           jsonrpc: "2.0",
           method: "gen_call",
-          params: [
-            {
-              to: CONTRACT_ADDRESS,
-              data: {
-                method: "get_sentiment",
-                args: [],
-              },
-            },
-            "latest",
-          ],
+          params: [{ to: CONTRACT_ADDRESS, data: { method: "get_sentiment", args: [] } }, "latest"],
           id: 1,
         }),
       });
-
       const data = await response.json();
-      if (data.result) {
-        setSentiment(data.result);
-      } else {
-        setError("Could not fetch sentiment. Try again.");
-      }
-    } catch (err) {
+      if (data.result) setSentiment(data.result);
+      else setError("Could not fetch sentiment. Try again.");
+    } catch {
       setError("Error connecting to GenLayer network.");
     } finally {
       setLoading(false);
     }
   };
 
-  const getSentimentColor = () => {
-    if (sentiment.includes("Bullish")) return "text-green-400";
-    if (sentiment.includes("Bearish")) return "text-red-400";
-    return "text-yellow-400";
+  const getColor = () => {
+    if (sentiment.includes("Bullish")) return "#22c55e";
+    if (sentiment.includes("Bearish")) return "#ef4444";
+    return "#eab308";
   };
 
-  const getSentimentEmoji = () => {
+  const getEmoji = () => {
     if (sentiment.includes("Bullish")) return "📈";
     if (sentiment.includes("Bearish")) return "📉";
     return "➡️";
   };
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center px-4">
-      <div className="max-w-lg w-full">
-
-        {/* Header */}
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold mb-2">
-            🔮 Crypto Sentiment Oracle
-          </h1>
-          <p className="text-gray-400 text-sm">
-            Powered by GenLayer AI Consensus • On-Chain Results
-          </p>
+    <div style={{ minHeight: "100vh", background: "#030712", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif", padding: "20px" }}>
+      <div style={{ maxWidth: "500px", width: "100%" }}>
+        
+        <div style={{ textAlign: "center", marginBottom: "40px" }}>
+          <h1 style={{ fontSize: "2rem", fontWeight: "bold", marginBottom: "8px" }}>🔮 Crypto Sentiment Oracle</h1>
+          <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>Powered by GenLayer AI Consensus • On-Chain Results</p>
         </div>
 
-        {/* Input */}
-        <div className="bg-gray-900 rounded-2xl p-6 mb-4 border border-gray-800">
-          <label className="text-sm text-gray-400 mb-2 block">
-            Enter a cryptocurrency name
-          </label>
+        <div style={{ background: "#111827", borderRadius: "16px", padding: "24px", marginBottom: "16px", border: "1px solid #1f2937" }}>
+          <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "8px" }}>Enter a cryptocurrency name</label>
           <input
             type="text"
             value={coin}
             onChange={(e) => setCoin(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && analyzeSentiment()}
             placeholder="Bitcoin, Ethereum, FTX..."
-            className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 outline-none border border-gray-700 focus:border-blue-500 mb-4"
+            style={{ width: "100%", background: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "12px", padding: "12px 16px", fontSize: "1rem", outline: "none", marginBottom: "16px", boxSizing: "border-box" }}
           />
           <button
             onClick={analyzeSentiment}
             disabled={loading || !coin}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-all"
+            style={{ width: "100%", background: loading || !coin ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin ? "not-allowed" : "pointer" }}
           >
             {loading ? "Analyzing on-chain..." : "Analyze Sentiment"}
           </button>
         </div>
 
-        {/* Result */}
         {sentiment && (
-          <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 text-center">
-            <p className="text-gray-400 text-sm mb-2">AI Sentiment for {coin}</p>
-            <div className={`text-5xl font-bold mb-2 ${getSentimentColor()}`}>
-              {getSentimentEmoji()} {sentiment.replace(/"/g, "")}
+          <div style={{ background: "#111827", borderRadius: "16px", padding: "24px", border: "1px solid #1f2937", textAlign: "center" }}>
+            <p style={{ color: "#9ca3af", fontSize: "0.85rem", marginBottom: "8px" }}>AI Sentiment for {coin}</p>
+            <div style={{ fontSize: "3rem", fontWeight: "bold", color: getColor() }}>
+              {getEmoji()} {sentiment.replace(/"/g, "")}
             </div>
-            <p className="text-gray-500 text-xs mt-4">
-              Result verified by GenLayer validators on-chain
-            </p>
+            <p style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: "16px" }}>Verified by GenLayer validators on-chain</p>
           </div>
         )}
 
-        {/* Error */}
         {error && (
-          <div className="bg-red-900 rounded-2xl p-4 border border-red-700 text-center text-red-300 text-sm">
+          <div style={{ background: "#7f1d1d", borderRadius: "16px", padding: "16px", border: "1px solid #991b1b", textAlign: "center", color: "#fca5a5", fontSize: "0.9rem" }}>
             {error}
           </div>
         )}
 
-        {/* Footer */}
-        <p className="text-center text-gray-600 text-xs mt-8">
+        <p style={{ textAlign: "center", color: "#4b5563", fontSize: "0.75rem", marginTop: "32px" }}>
           Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)} • GenLayer Testnet
         </p>
       </div>
-    </main>
+    </div>
   );
 }
