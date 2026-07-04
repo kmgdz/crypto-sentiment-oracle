@@ -27,15 +27,15 @@ Next.js 15 + TypeScript + Tailwind CSS
         ↓
 Layer 1 — PROTOCOL
 GenLayer Optimistic Democracy
-- 5 validators fetch live CoinMarketCap data
+- Validators fetch live CoinMarketCap data
 - Each runs LLM analysis independently
 - Consensus reached via prompt_comparative
 - Result stored permanently on-chain
         ↓
 Layer 0 — CONTRACT (sentiment.py)
 - gl.nondet.web.get() → fetch live web data
-- gl.eq_principle.strict_eq() → deterministic fetch
-- gl.eq_principle.prompt_comparative() → AI verdict
+- gl.nondet.exec_prompt() → LLM sentiment judgment
+- gl.eq_principle.prompt_comparative() → single consensus check covering both the fetch and the AI verdict together
 - Stores: coin_name + sentiment on-chain
 ```
 
@@ -54,8 +54,8 @@ Layer 0 — CONTRACT (sentiment.py)
 
 ## Contract Details
 
-- **Contract Address:** `0xe41097D3e22B5d10D1ec5D8e7f24c0E1A296f064`
-- **Network:** GenLayer Testnet
+- **Contract Address:** `0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6`
+- **Network:** GenLayer Studionet
 - **Language:** Python (Intelligent Contract)
 
 ---
@@ -64,8 +64,8 @@ Layer 0 — CONTRACT (sentiment.py)
 
 | Decision | Rationale |
 |----------|-----------|
-| `gl.eq_principle.strict_eq` for web fetch | Ensures all validators get identical web content |
-| `gl.eq_principle.prompt_comparative` for AI | Allows subjective AI judgment with validator consensus |
+| Fetch + LLM judgment combined in one `prompt_comparative` call | An earlier version used `strict_eq` on the raw fetched HTML as a separate step. That requires every validator to get byte-identical content from a live, bot-protected commercial site — which rarely happens (ads, timestamps, anti-bot challenges vary per request) and caused transactions to hang indefinitely, since consensus could never be reached. Judging only the final sentiment word is far more robust. |
+| `gl.eq_principle.prompt_comparative` for the verdict | Allows subjective AI judgment with validator consensus; validators only need to agree the *conclusion* is equivalent, not that every byte of input matched |
 | CoinMarketCap as data source | Reliable, always accessible, rich crypto data |
 | Single word response (Bullish/Bearish/Neutral) | Maximizes consensus success rate across validators |
 
@@ -81,7 +81,15 @@ npm install
 npm run dev
 ```
 
-The contract is deployed on GenLayer Testnet at the address above.
+The contract is deployed on GenLayer Studionet at the address above.
+
+### How To Test
+
+1. Open the live app, click **Connect Wallet**, and approve MetaMask (it will prompt to add/switch to GenLayer Studionet if needed)
+2. Enter a coin name (e.g. "solana") and click **Analyze Sentiment On-Chain**
+3. Confirm the transaction in MetaMask
+4. Wait roughly 30–90 seconds — the page polls automatically. It should resolve to a real Bullish/Bearish/Neutral verdict, not hang indefinitely
+5. The transaction hash shown links directly to the [GenLayer Explorer](https://explorer-studio.genlayer.com/) — check that it shows `GenVM Result: SUCCESS` and `Status: FINALIZED`
 
 ---
 

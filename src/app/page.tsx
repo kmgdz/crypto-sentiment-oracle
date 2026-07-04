@@ -1,14 +1,18 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import { createClient, chains, createAccount } from "genlayer-js";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { createClient, chains } from "genlayer-js";
 
-const CONTRACT_ADDRESS = "0xe41097D3e22B5d10D1ec5D8e7f24c0E1A296f064" as `0x${string}`;
+const CONTRACT_ADDRESS = "0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6" as `0x${string}`;
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
-
-const client = createClient({
-  chain: chains.studionet,
-  endpoint: "https://studio.genlayer.com/api",
-});
+const RPC_URL = "https://studio.genlayer.com/api";
+const CHAIN_ID_HEX = "0xf22f"; // 61999 - GenLayer Studionet
+const CHAIN_PARAMS = {
+  chainId: CHAIN_ID_HEX,
+  chainName: "GenLayer Studionet",
+  nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
+  rpcUrls: [RPC_URL],
+  blockExplorerUrls: ["https://explorer-studio.genlayer.com"],
+};
 
 const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }> = {
   bitcoin:  { desc: "The first and largest cryptocurrency by market cap.", symbol: "BTC", color: "#f97316" },
@@ -21,6 +25,13 @@ const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }>
   luna:     { desc: "Collapsed algorithmic stablecoin ecosystem (Terra).", symbol: "LUNA", color: "#ef4444" },
 };
 
+// Read-only client, used before a wallet is connected (and for reads
+// afterward too — reads don't need a signer).
+const readClient = createClient({
+  chain: chains.studionet,
+  endpoint: RPC_URL,
+});
+
 export default function Home() {
   const [coin, setCoin] = useState("");
   const [sentiment, setSentiment] = useState("");
@@ -30,15 +41,101 @@ export default function Home() {
   const [txHash, setTxHash] = useState("");
   const [showHow, setShowHow] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [walletAddr, setWalletAddr] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  // Write client, bound to the connected wallet once available. Using a
+  // ref (not state) since we don't need re-renders when it's created —
+  // only walletAddr drives the UI.
+  const writeClientRef = useRef<ReturnType<typeof createClient> | null>(null);
+
+  const ensureNetwork = useCallback(async () => {
+    const eth = (window as any).ethereum;
+    if (!eth) throw new Error("No wallet found. Install MetaMask.");
+    try {
+      await eth.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: CHAIN_ID_HEX }],
+      });
+    } catch (switchErr: any) {
+      if (switchErr.code === 4902 || switchErr.code === -32603) {
+        await eth.request({
+          method: "wallet_addEthereumChain",
+          params: [CHAIN_PARAMS],
+        });
+      } else {
+        throw switchErr;
+      }
+    }
+  }, []);
+
+  const connectWallet = useCallback(async () => {
+    const eth = (window as any).ethereum;
+    if (!eth) {
+      setStatus("❌ No wallet found. Install MetaMask to continue.");
+      return;
+    }
+    setConnecting(true);
+    try {
+      const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
+      const addr = accounts[0];
+      await ensureNetwork();
+      setWalletAddr(addr);
+      writeClientRef.current = createClient({
+        chain: chains.studionet,
+        endpoint: RPC_URL,
+        account: addr as `0x${string}`,
+      });
+      setStatus("✅ Wallet connected!");
+    } catch (e: any) {
+      setStatus("❌ " + (e.message || "Failed to connect wallet"));
+    } finally {
+      setConnecting(false);
+    }
+  }, [ensureNetwork]);
+
+  // Silently reconnect on page load if already authorized, and react to
+  // account/network changes from the wallet extension.
+  useEffect(() => {
+    const eth = (window as any).ethereum;
+    if (!eth) return;
+
+    eth.request({ method: "eth_accounts" }).then((accounts: string[]) => {
+      if (accounts && accounts.length > 0) {
+        setWalletAddr(accounts[0]);
+        writeClientRef.current = createClient({
+          chain: chains.studionet,
+          endpoint: RPC_URL,
+          account: accounts[0] as `0x${string}`,
+        });
+      }
+    }).catch(() => {});
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length === 0) {
+        setWalletAddr(null);
+        writeClientRef.current = null;
+      } else {
+        setWalletAddr(accounts[0]);
+        writeClientRef.current = createClient({
+          chain: chains.studionet,
+          endpoint: RPC_URL,
+          account: accounts[0] as `0x${string}`,
+        });
+      }
+    };
+    eth.on?.("accountsChanged", handleAccountsChanged);
+    return () => eth.removeListener?.("accountsChanged", handleAccountsChanged);
+  }, []);
 
   const fetchSentiment = useCallback(async () => {
     try {
-      const s = await client.readContract({
+      const s = await readClient.readContract({
         address: CONTRACT_ADDRESS,
         functionName: "get_sentiment",
         args: [],
       });
-      const c = await client.readContract({
+      const c = await readClient.readContract({
         address: CONTRACT_ADDRESS,
         functionName: "get_coin",
         args: [],
@@ -70,6 +167,10 @@ export default function Home() {
 
   const analyzeSentiment = async () => {
     if (!coin) return;
+    if (!walletAddr || !writeClientRef.current) {
+      setStatus("⚠️ Connect your wallet first.");
+      return;
+    }
     setLoading(true);
     setSentiment("");
     setTxHash("");
@@ -78,33 +179,29 @@ export default function Home() {
     setStatus("⏳ Sending transaction...");
 
     try {
-      // Use createAccount() like Aequitas does
-      const account = createAccount();
+      await ensureNetwork();
 
-      const hash = await client.writeContract({
+      const hash = await writeClientRef.current.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: "analyze_sentiment",
         args: [coin],
-        account,
         value: BigInt(0),
       });
 
       setTxHash(String(hash));
       setStatus("✅ Transaction sent! Waiting for AI consensus...");
 
-      // Wait for receipt like Aequitas does
       let secs = 0;
       const timer = setInterval(() => { secs++; setElapsed(secs); }, 1000);
 
       setStatus("🔄 Waiting for validators to reach consensus...");
 
-      const receipt = await client.waitForTransactionReceipt({ hash });
+      const receipt = await readClient.waitForTransactionReceipt({ hash });
       clearInterval(timer);
 
       console.log("receipt:", receipt);
       setStatus("✅ Consensus reached! Reading result...");
 
-      // Read result after receipt
       const { sentiment: s, coin: c } = await fetchSentiment();
       if (s) {
         setSentiment(s);
@@ -141,6 +238,20 @@ export default function Home() {
     <div style={{ minHeight: "100vh", background: "#030712", color: "white", fontFamily: "sans-serif", padding: "20px" }}>
       <div style={{ maxWidth: "600px", margin: "0 auto", paddingTop: "40px" }}>
 
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+          {walletAddr ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#111827", border: "1px solid #1f2937", borderRadius: "999px", padding: "6px 14px", fontSize: "0.8rem", color: "#9ca3af" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+              Connected: {walletAddr.slice(0, 6)}...{walletAddr.slice(-4)}
+            </div>
+          ) : (
+            <button onClick={connectWallet} disabled={connecting}
+              style={{ background: "#2563eb", color: "white", border: "none", borderRadius: "999px", padding: "8px 18px", fontSize: "0.85rem", fontWeight: "600", cursor: connecting ? "not-allowed" : "pointer" }}>
+              {connecting ? "Connecting..." : "Connect Wallet"}
+            </button>
+          )}
+        </div>
+
         <div style={{ textAlign: "center", marginBottom: "40px" }}>
           <h1 style={{ fontSize: "2.2rem", fontWeight: "bold", marginBottom: "8px" }}>🔮 Crypto Sentiment Oracle</h1>
           <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>Powered by GenLayer AI Consensus • On-Chain Results</p>
@@ -155,7 +266,7 @@ export default function Home() {
             <div style={{ marginTop: "12px", color: "#9ca3af", fontSize: "0.85rem", lineHeight: "1.8" }}>
               <p>1️⃣ <strong style={{ color: "white" }}>You submit</strong> a coin name — sends a real transaction to GenLayer.</p>
               <p>2️⃣ <strong style={{ color: "white" }}>GenLayer fetches</strong> live data from CoinMarketCap directly on-chain.</p>
-              <p>3️⃣ <strong style={{ color: "white" }}>5 AI validators</strong> independently analyze with LLMs and vote.</p>
+              <p>3️⃣ <strong style={{ color: "white" }}>AI validators</strong> independently analyze with LLMs and vote.</p>
               <p>4️⃣ <strong style={{ color: "white" }}>Consensus reached</strong> via GenLayer's Optimistic Democracy.</p>
               <p>5️⃣ <strong style={{ color: "white" }}>Result stored permanently</strong> on-chain — Bullish / Bearish / Neutral.</p>
             </div>
@@ -174,8 +285,14 @@ export default function Home() {
             placeholder="Bitcoin, Ethereum, Solana..."
             style={{ width: "100%", background: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "12px", padding: "12px 16px", fontSize: "1rem", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
           />
-          <button onClick={analyzeSentiment} disabled={loading || !coin}
-            style={{ width: "100%", background: loading || !coin ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin ? "not-allowed" : "pointer", marginBottom: "8px" }}>
+          {!walletAddr && (
+            <button onClick={connectWallet} disabled={connecting}
+              style={{ width: "100%", background: "#374151", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: "pointer", marginBottom: "8px" }}>
+              {connecting ? "Connecting..." : "🔌 Connect Wallet To Analyze"}
+            </button>
+          )}
+          <button onClick={analyzeSentiment} disabled={loading || !coin || !walletAddr}
+            style={{ width: "100%", background: loading || !coin || !walletAddr ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin || !walletAddr ? "not-allowed" : "pointer", marginBottom: "8px" }}>
             {loading ? `⏳ Analyzing... ${elapsed}s` : "⚡ Analyze Sentiment On-Chain"}
           </button>
           <button onClick={handleRead} disabled={loading}
@@ -226,11 +343,11 @@ export default function Home() {
               </div>
               <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
                 <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>VALIDATORS</p>
-                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>5 AI Nodes</p>
+                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>AI Nodes</p>
               </div>
               <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
                 <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>NETWORK</p>
-                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>GenLayer Testnet</p>
+                <p style={{ fontSize: "0.85rem", fontWeight: "600" }}>GenLayer Studionet</p>
               </div>
               <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px", textAlign: "center" }}>
                 <p style={{ color: "#6b7280", fontSize: "0.7rem", marginBottom: "4px" }}>METHOD</p>
@@ -239,13 +356,13 @@ export default function Home() {
             </div>
 
             <p style={{ color: "#6b7280", fontSize: "0.72rem", textAlign: "center", marginTop: "16px" }}>
-              ✅ Verified by 5 GenLayer AI validators on-chain
+              ✅ Verified by GenLayer AI validators on-chain
             </p>
           </div>
         )}
 
         <p style={{ textAlign: "center", color: "#4b5563", fontSize: "0.75rem", marginTop: "20px" }}>
-          Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)} • GenLayer Testnet
+          Contract: {CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)} • GenLayer Studionet
         </p>
       </div>
     </div>
