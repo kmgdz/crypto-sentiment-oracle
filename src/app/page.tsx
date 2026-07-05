@@ -1,8 +1,15 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { createClient, createAccount, chains } from "genlayer-js";
+import { createClient, createAccount, generatePrivateKey } from "genlayer-js";
+import { localnet } from "genlayer-js/chains";
+import type { Address } from "genlayer-js/types";
+// NOTE: genlayer-js@0.7.0 (the version pinned in package.json) does not
+// export a "studionet" chain preset — only "localnet" and "simulator"
+// exist. localnet's chain ID (61999 / 0xf22f) is exactly GenLayer
+// Studionet's real chain ID, so we use it as the base chain and override
+// its RPC endpoint below to actually point at Studio's live API.
 
-const CONTRACT_ADDRESS = "0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6" as `0x${string}`;
+const CONTRACT_ADDRESS = "0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6" as Address;
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
 const RPC_URL = "https://studio.genlayer.com/api";
 const STORAGE_KEY = "gl_sentiment_oracle_privkey";
@@ -39,17 +46,15 @@ export default function Home() {
   const clientRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
-    let privateKey = localStorage.getItem(STORAGE_KEY);
-    let account;
-    if (privateKey) {
-      account = createAccount(privateKey as `0x${string}`);
-    } else {
-      account = createAccount();
-      localStorage.setItem(STORAGE_KEY, account.privateKey);
+    let privateKey = localStorage.getItem(STORAGE_KEY) as `0x${string}` | null;
+    if (!privateKey) {
+      privateKey = generatePrivateKey();
+      localStorage.setItem(STORAGE_KEY, privateKey);
     }
+    const account = createAccount(privateKey);
     setAppWalletAddr(account.address);
     clientRef.current = createClient({
-      chain: chains.studionet,
+      chain: localnet,
       endpoint: RPC_URL,
       account,
     });
