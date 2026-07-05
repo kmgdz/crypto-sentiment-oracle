@@ -1,18 +1,11 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { createClient, chains } from "genlayer-js";
+import { useState, useEffect, useRef } from "react";
+import { createClient, createAccount, chains } from "genlayer-js";
 
 const CONTRACT_ADDRESS = "0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6" as `0x${string}`;
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
 const RPC_URL = "https://studio.genlayer.com/api";
-const CHAIN_ID_HEX = "0xf22f"; // 61999 - GenLayer Studionet
-const CHAIN_PARAMS = {
-  chainId: CHAIN_ID_HEX,
-  chainName: "GenLayer Studionet",
-  nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
-  rpcUrls: [RPC_URL],
-  blockExplorerUrls: ["https://explorer-studio.genlayer.com"],
-};
+const STORAGE_KEY = "gl_sentiment_oracle_privkey";
 
 const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }> = {
   bitcoin:  { desc: "The first and largest cryptocurrency by market cap.", symbol: "BTC", color: "#f97316" },
@@ -25,13 +18,6 @@ const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }>
   luna:     { desc: "Collapsed algorithmic stablecoin ecosystem (Terra).", symbol: "LUNA", color: "#ef4444" },
 };
 
-// Read-only client, used before a wallet is connected (and for reads
-// afterward too — reads don't need a signer).
-const readClient = createClient({
-  chain: chains.studionet,
-  endpoint: RPC_URL,
-});
-
 export default function Home() {
   const [coin, setCoin] = useState("");
   const [sentiment, setSentiment] = useState("");
@@ -41,106 +27,47 @@ export default function Home() {
   const [txHash, setTxHash] = useState("");
   const [showHow, setShowHow] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [walletAddr, setWalletAddr] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [appWalletAddr, setAppWalletAddr] = useState<string | null>(null);
 
-  // Write client, bound to the connected wallet once available. Using a
-  // ref (not state) since we don't need re-renders when it's created —
-  // only walletAddr drives the UI.
-  const writeClientRef = useRef<ReturnType<typeof createClient> | null>(null);
+  // genlayer-js's officially documented, working signing method is a local
+  // private-key account (createAccount()) — there is no working example
+  // anywhere of MetaMask/injected-wallet signing actually broadcasting a
+  // transaction for this SDK version. To avoid a new random throwaway
+  // account on every click (which is what this app did before, and which
+  // is misleading), we generate ONE key the first time this app runs in
+  // this browser and persist it in localStorage, reusing it from then on.
+  const clientRef = useRef<ReturnType<typeof createClient> | null>(null);
 
-  const ensureNetwork = useCallback(async () => {
-    const eth = (window as any).ethereum;
-    if (!eth) throw new Error("No wallet found. Install MetaMask.");
-    try {
-      await eth.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: CHAIN_ID_HEX }],
-      });
-    } catch (switchErr: any) {
-      if (switchErr.code === 4902 || switchErr.code === -32603) {
-        await eth.request({
-          method: "wallet_addEthereumChain",
-          params: [CHAIN_PARAMS],
-        });
-      } else {
-        throw switchErr;
-      }
-    }
-  }, []);
-
-  const connectWallet = useCallback(async () => {
-    const eth = (window as any).ethereum;
-    if (!eth) {
-      setStatus("❌ No wallet found. Install MetaMask to continue.");
-      return;
-    }
-    setConnecting(true);
-    try {
-      const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
-      const addr = accounts[0];
-      await ensureNetwork();
-      setWalletAddr(addr);
-      writeClientRef.current = createClient({
-        chain: chains.studionet,
-        endpoint: RPC_URL,
-        account: addr as `0x${string}`,
-      });
-      setStatus("✅ Wallet connected!");
-    } catch (e: any) {
-      setStatus("❌ " + (e.message || "Failed to connect wallet"));
-    } finally {
-      setConnecting(false);
-    }
-  }, [ensureNetwork]);
-
-  // Silently reconnect on page load if already authorized, and react to
-  // account/network changes from the wallet extension.
   useEffect(() => {
-    const eth = (window as any).ethereum;
-    if (!eth) return;
-
-    eth.request({ method: "eth_accounts" }).then((accounts: string[]) => {
-      if (accounts && accounts.length > 0) {
-        setWalletAddr(accounts[0]);
-        writeClientRef.current = createClient({
-          chain: chains.studionet,
-          endpoint: RPC_URL,
-          account: accounts[0] as `0x${string}`,
-        });
-      }
-    }).catch(() => {});
-
-    const handleAccountsChanged = (accounts: string[]) => {
-      if (accounts.length === 0) {
-        setWalletAddr(null);
-        writeClientRef.current = null;
-      } else {
-        setWalletAddr(accounts[0]);
-        writeClientRef.current = createClient({
-          chain: chains.studionet,
-          endpoint: RPC_URL,
-          account: accounts[0] as `0x${string}`,
-        });
-      }
-    };
-    eth.on?.("accountsChanged", handleAccountsChanged);
-    return () => eth.removeListener?.("accountsChanged", handleAccountsChanged);
+    let privateKey = localStorage.getItem(STORAGE_KEY);
+    let account;
+    if (privateKey) {
+      account = createAccount(privateKey as `0x${string}`);
+    } else {
+      account = createAccount();
+      localStorage.setItem(STORAGE_KEY, account.privateKey);
+    }
+    setAppWalletAddr(account.address);
+    clientRef.current = createClient({
+      chain: chains.studionet,
+      endpoint: RPC_URL,
+      account,
+    });
   }, []);
 
-  const fetchSentiment = useCallback(async () => {
+  const fetchSentiment = async () => {
+    if (!clientRef.current) return { sentiment: "", coin: "" };
     try {
-      const s = await readClient.readContract({
+      const s = await clientRef.current.readContract({
         address: CONTRACT_ADDRESS,
         functionName: "get_sentiment",
         args: [],
       });
-      const c = await readClient.readContract({
+      const c = await clientRef.current.readContract({
         address: CONTRACT_ADDRESS,
         functionName: "get_coin",
         args: [],
       });
-      console.log("readContract sentiment:", s, "coin:", c);
       return {
         sentiment: String(s || "").replace(/"/g, "").trim(),
         coin: String(c || "").replace(/"/g, "").trim(),
@@ -149,7 +76,7 @@ export default function Home() {
       console.error("readContract error:", e);
       return { sentiment: "", coin: "" };
     }
-  }, []);
+  };
 
   const handleRead = async () => {
     setLoading(true);
@@ -167,8 +94,8 @@ export default function Home() {
 
   const analyzeSentiment = async () => {
     if (!coin) return;
-    if (!walletAddr || !writeClientRef.current) {
-      setStatus("⚠️ Connect your wallet first.");
+    if (!clientRef.current) {
+      setStatus("⚠️ Wallet not ready yet, try again in a second.");
       return;
     }
     setLoading(true);
@@ -179,9 +106,7 @@ export default function Home() {
     setStatus("⏳ Sending transaction...");
 
     try {
-      await ensureNetwork();
-
-      const hash = await writeClientRef.current.writeContract({
+      const hash = await clientRef.current.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: "analyze_sentiment",
         args: [coin],
@@ -191,12 +116,10 @@ export default function Home() {
       setTxHash(String(hash));
       setStatus("✅ Transaction sent! Waiting for AI consensus...");
 
-      let secs = 0;
-      const timer = setInterval(() => { secs++; setElapsed(secs); }, 1000);
+      const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
 
       setStatus("🔄 Waiting for validators to reach consensus...");
-
-      const receipt = await readClient.waitForTransactionReceipt({ hash });
+      const receipt = await clientRef.current.waitForTransactionReceipt({ hash });
       clearInterval(timer);
 
       console.log("receipt:", receipt);
@@ -210,7 +133,6 @@ export default function Home() {
       } else {
         setStatus("⚠️ Transaction done. Click '📖 Read Latest Result'.");
       }
-
     } catch (err: any) {
       console.error("writeContract error:", err);
       setStatus("❌ " + (err.message || "Transaction failed"));
@@ -239,16 +161,14 @@ export default function Home() {
       <div style={{ maxWidth: "600px", margin: "0 auto", paddingTop: "40px" }}>
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
-          {walletAddr ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#111827", border: "1px solid #1f2937", borderRadius: "999px", padding: "6px 14px", fontSize: "0.8rem", color: "#9ca3af" }}>
+          {appWalletAddr ? (
+            <div title="A signing key generated for this browser and stored locally — not MetaMask."
+              style={{ display: "flex", alignItems: "center", gap: "6px", background: "#111827", border: "1px solid #1f2937", borderRadius: "999px", padding: "6px 14px", fontSize: "0.8rem", color: "#9ca3af" }}>
               <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-              Connected: {walletAddr.slice(0, 6)}...{walletAddr.slice(-4)}
+              App Wallet: {appWalletAddr.slice(0, 6)}...{appWalletAddr.slice(-4)}
             </div>
           ) : (
-            <button onClick={connectWallet} disabled={connecting}
-              style={{ background: "#2563eb", color: "white", border: "none", borderRadius: "999px", padding: "8px 18px", fontSize: "0.85rem", fontWeight: "600", cursor: connecting ? "not-allowed" : "pointer" }}>
-              {connecting ? "Connecting..." : "Connect Wallet"}
-            </button>
+            <div style={{ color: "#6b7280", fontSize: "0.8rem" }}>Setting up wallet...</div>
           )}
         </div>
 
@@ -269,6 +189,9 @@ export default function Home() {
               <p>3️⃣ <strong style={{ color: "white" }}>AI validators</strong> independently analyze with LLMs and vote.</p>
               <p>4️⃣ <strong style={{ color: "white" }}>Consensus reached</strong> via GenLayer's Optimistic Democracy.</p>
               <p>5️⃣ <strong style={{ color: "white" }}>Result stored permanently</strong> on-chain — Bullish / Bearish / Neutral.</p>
+              <p style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #1f2937", fontSize: "0.78rem" }}>
+                💡 Transactions are signed by a local <strong style={{ color: "white" }}>App Wallet</strong> — a key pair generated for this browser and stored only in your browser's local storage, not a MetaMask connection.
+              </p>
             </div>
           )}
         </div>
@@ -285,14 +208,8 @@ export default function Home() {
             placeholder="Bitcoin, Ethereum, Solana..."
             style={{ width: "100%", background: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "12px", padding: "12px 16px", fontSize: "1rem", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
           />
-          {!walletAddr && (
-            <button onClick={connectWallet} disabled={connecting}
-              style={{ width: "100%", background: "#374151", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: "pointer", marginBottom: "8px" }}>
-              {connecting ? "Connecting..." : "🔌 Connect Wallet To Analyze"}
-            </button>
-          )}
-          <button onClick={analyzeSentiment} disabled={loading || !coin || !walletAddr}
-            style={{ width: "100%", background: loading || !coin || !walletAddr ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin || !walletAddr ? "not-allowed" : "pointer", marginBottom: "8px" }}>
+          <button onClick={analyzeSentiment} disabled={loading || !coin || !appWalletAddr}
+            style={{ width: "100%", background: loading || !coin || !appWalletAddr ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin || !appWalletAddr ? "not-allowed" : "pointer", marginBottom: "8px" }}>
             {loading ? `⏳ Analyzing... ${elapsed}s` : "⚡ Analyze Sentiment On-Chain"}
           </button>
           <button onClick={handleRead} disabled={loading}
