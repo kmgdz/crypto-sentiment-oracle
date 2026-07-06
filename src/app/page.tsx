@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient, createAccount, generatePrivateKey } from "genlayer-js";
 import { localnet } from "genlayer-js/chains";
 import type { Address } from "genlayer-js/types";
@@ -12,6 +12,14 @@ import type { Address } from "genlayer-js/types";
 const CONTRACT_ADDRESS = "0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6" as Address;
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
 const RPC_URL = "https://studio.genlayer.com/api";
+const CHAIN_ID_HEX = "0xf22f"; // 61999
+const CHAIN_PARAMS = {
+  chainId: CHAIN_ID_HEX,
+  chainName: "GenLayer Studionet",
+  nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
+  rpcUrls: [RPC_URL],
+  blockExplorerUrls: ["https://explorer-studio.genlayer.com"],
+};
 const STORAGE_KEY = "gl_sentiment_oracle_privkey";
 
 const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }> = {
@@ -25,6 +33,8 @@ const COIN_INFO: Record<string, { desc: string; symbol: string; color: string }>
   luna:     { desc: "Collapsed algorithmic stablecoin ecosystem (Terra).", symbol: "LUNA", color: "#ef4444" },
 };
 
+type WalletMode = "app" | "metamask";
+
 export default function Home() {
   const [coin, setCoin] = useState("");
   const [sentiment, setSentiment] = useState("");
@@ -35,16 +45,23 @@ export default function Home() {
   const [showHow, setShowHow] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [appWalletAddr, setAppWalletAddr] = useState<string | null>(null);
+  const [metamaskAddr, setMetamaskAddr] = useState<string | null>(null);
+  const [walletMode, setWalletMode] = useState<WalletMode>("app");
+  const [connecting, setConnecting] = useState(false);
 
-  // genlayer-js's officially documented, working signing method is a local
-  // private-key account (createAccount()) — there is no working example
-  // anywhere of MetaMask/injected-wallet signing actually broadcasting a
-  // transaction for this SDK version. To avoid a new random throwaway
-  // account on every click (which is what this app did before, and which
-  // is misleading), we generate ONE key the first time this app runs in
-  // this browser and persist it in localStorage, reusing it from then on.
-  const clientRef = useRef<ReturnType<typeof createClient> | null>(null);
+  // Two possible signing clients:
+  // - appClientRef: a persistent local key, generated once per browser and
+  //   stored in localStorage. This is the reliable default.
+  // - metamaskClientRef: bound to a real connected MetaMask address. Reads
+  //   from either client work the same way; only writeContract differs in
+  //   how the transaction gets signed.
+  const appClientRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const metamaskClientRef = useRef<ReturnType<typeof createClient> | null>(null);
 
+  const activeClient = () =>
+    walletMode === "metamask" ? metamaskClientRef.current : appClientRef.current;
+
+  // Set up the persistent local App Wallet on first load.
   useEffect(() => {
     let privateKey = localStorage.getItem(STORAGE_KEY) as `0x${string}` | null;
     if (!privateKey) {
@@ -53,22 +70,74 @@ export default function Home() {
     }
     const account = createAccount(privateKey);
     setAppWalletAddr(account.address);
-    clientRef.current = createClient({
+    appClientRef.current = createClient({
       chain: localnet,
       endpoint: RPC_URL,
       account,
     });
   }, []);
 
-  const fetchSentiment = async () => {
-    if (!clientRef.current) return { sentiment: "", coin: "" };
+  const ensureNetwork = useCallback(async () => {
+    const eth = (window as any).ethereum;
+    if (!eth) throw new Error("No wallet found. Install MetaMask.");
     try {
-      const s = await clientRef.current.readContract({
+      await eth.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: CHAIN_ID_HEX }],
+      });
+    } catch (switchErr: any) {
+      if (switchErr.code === 4902 || switchErr.code === -32603) {
+        await eth.request({
+          method: "wallet_addEthereumChain",
+          params: [CHAIN_PARAMS],
+        });
+      } else {
+        throw switchErr;
+      }
+    }
+  }, []);
+
+  const connectMetaMask = useCallback(async () => {
+    const eth = (window as any).ethereum;
+    if (!eth) {
+      setStatus("❌ No wallet found. Install MetaMask to use this option.");
+      return;
+    }
+    setConnecting(true);
+    try {
+      const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
+      const addr = accounts[0];
+      await ensureNetwork();
+      setMetamaskAddr(addr);
+      metamaskClientRef.current = createClient({
+        chain: localnet,
+        endpoint: RPC_URL,
+        account: addr as Address,
+      });
+      setWalletMode("metamask");
+      setStatus("✅ MetaMask connected! Transactions will now be signed by " + addr.slice(0, 6) + "...");
+    } catch (e: any) {
+      setStatus("❌ " + (e.message || "Failed to connect MetaMask"));
+    } finally {
+      setConnecting(false);
+    }
+  }, [ensureNetwork]);
+
+  const useAppWallet = () => {
+    setWalletMode("app");
+    setStatus("Switched to App Wallet.");
+  };
+
+  const fetchSentiment = async () => {
+    const client = appClientRef.current; // reads work fine from either client; app client always exists
+    if (!client) return { sentiment: "", coin: "" };
+    try {
+      const s = await client.readContract({
         address: CONTRACT_ADDRESS,
         functionName: "get_sentiment",
         args: [],
       });
-      const c = await clientRef.current.readContract({
+      const c = await client.readContract({
         address: CONTRACT_ADDRESS,
         functionName: "get_coin",
         args: [],
@@ -99,7 +168,8 @@ export default function Home() {
 
   const analyzeSentiment = async () => {
     if (!coin) return;
-    if (!clientRef.current) {
+    const client = activeClient();
+    if (!client) {
       setStatus("⚠️ Wallet not ready yet, try again in a second.");
       return;
     }
@@ -111,7 +181,9 @@ export default function Home() {
     setStatus("⏳ Sending transaction...");
 
     try {
-      const hash = await clientRef.current.writeContract({
+      if (walletMode === "metamask") await ensureNetwork();
+
+      const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: "analyze_sentiment",
         args: [coin],
@@ -124,7 +196,7 @@ export default function Home() {
       const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
 
       setStatus("🔄 Waiting for validators to reach consensus...");
-      const receipt = await clientRef.current.waitForTransactionReceipt({ hash });
+      const receipt = await client.waitForTransactionReceipt({ hash });
       clearInterval(timer);
 
       console.log("receipt:", receipt);
@@ -160,20 +232,30 @@ export default function Home() {
 
   const coinKey = analyzedCoin.toLowerCase();
   const coinInfo = COIN_INFO[coinKey];
+  const currentAddr = walletMode === "metamask" ? metamaskAddr : appWalletAddr;
 
   return (
     <div style={{ minHeight: "100vh", background: "#030712", color: "white", fontFamily: "sans-serif", padding: "20px" }}>
       <div style={{ maxWidth: "600px", margin: "0 auto", paddingTop: "40px" }}>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
-          {appWalletAddr ? (
-            <div title="A signing key generated for this browser and stored locally — not MetaMask."
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+          {currentAddr && (
+            <div title={walletMode === "metamask" ? "Connected via MetaMask" : "A signing key generated for this browser and stored locally — not MetaMask."}
               style={{ display: "flex", alignItems: "center", gap: "6px", background: "#111827", border: "1px solid #1f2937", borderRadius: "999px", padding: "6px 14px", fontSize: "0.8rem", color: "#9ca3af" }}>
               <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-              App Wallet: {appWalletAddr.slice(0, 6)}...{appWalletAddr.slice(-4)}
+              {walletMode === "metamask" ? "MetaMask" : "App Wallet"}: {currentAddr.slice(0, 6)}...{currentAddr.slice(-4)}
             </div>
+          )}
+          {walletMode === "app" ? (
+            <button onClick={connectMetaMask} disabled={connecting}
+              style={{ background: "#2563eb", color: "white", border: "none", borderRadius: "999px", padding: "6px 14px", fontSize: "0.8rem", fontWeight: "600", cursor: connecting ? "not-allowed" : "pointer" }}>
+              {connecting ? "Connecting..." : "🔌 Connect MetaMask"}
+            </button>
           ) : (
-            <div style={{ color: "#6b7280", fontSize: "0.8rem" }}>Setting up wallet...</div>
+            <button onClick={useAppWallet}
+              style={{ background: "#374151", color: "white", border: "none", borderRadius: "999px", padding: "6px 14px", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}>
+              Use App Wallet Instead
+            </button>
           )}
         </div>
 
@@ -195,7 +277,7 @@ export default function Home() {
               <p>4️⃣ <strong style={{ color: "white" }}>Consensus reached</strong> via GenLayer's Optimistic Democracy.</p>
               <p>5️⃣ <strong style={{ color: "white" }}>Result stored permanently</strong> on-chain — Bullish / Bearish / Neutral.</p>
               <p style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #1f2937", fontSize: "0.78rem" }}>
-                💡 Transactions are signed by a local <strong style={{ color: "white" }}>App Wallet</strong> — a key pair generated for this browser and stored only in your browser's local storage, not a MetaMask connection.
+                💡 By default, transactions are signed by a local <strong style={{ color: "white" }}>App Wallet</strong> stored only in your browser. Prefer using your own wallet? Click <strong style={{ color: "white" }}>Connect MetaMask</strong> above.
               </p>
             </div>
           )}
@@ -213,8 +295,8 @@ export default function Home() {
             placeholder="Bitcoin, Ethereum, Solana..."
             style={{ width: "100%", background: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "12px", padding: "12px 16px", fontSize: "1rem", outline: "none", marginBottom: "12px", boxSizing: "border-box" }}
           />
-          <button onClick={analyzeSentiment} disabled={loading || !coin || !appWalletAddr}
-            style={{ width: "100%", background: loading || !coin || !appWalletAddr ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin || !appWalletAddr ? "not-allowed" : "pointer", marginBottom: "8px" }}>
+          <button onClick={analyzeSentiment} disabled={loading || !coin || !currentAddr}
+            style={{ width: "100%", background: loading || !coin || !currentAddr ? "#374151" : "#2563eb", color: "white", border: "none", borderRadius: "12px", padding: "14px", fontSize: "1rem", fontWeight: "600", cursor: loading || !coin || !currentAddr ? "not-allowed" : "pointer", marginBottom: "8px" }}>
             {loading ? `⏳ Analyzing... ${elapsed}s` : "⚡ Analyze Sentiment On-Chain"}
           </button>
           <button onClick={handleRead} disabled={loading}
