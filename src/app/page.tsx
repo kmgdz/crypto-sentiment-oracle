@@ -9,7 +9,7 @@ import type { Address } from "genlayer-js/types";
 // Studionet's real chain ID, so we use it as the base chain and override
 // its RPC endpoint below to actually point at Studio's live API.
 
-const CONTRACT_ADDRESS = "0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6" as Address;
+const CONTRACT_ADDRESS = "0xE600354686fb0AB5da076e1ED21838d46c4EC054" as Address;
 const EXPLORER_URL = "https://explorer-studio.genlayer.com/tx/";
 const RPC_URL = "https://studio.genlayer.com/api";
 const CHAIN_ID_HEX = "0xf22f"; // 61999

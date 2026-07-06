@@ -5,11 +5,11 @@
 **AI-powered crypto sentiment analysis running natively on-chain via GenLayer Intelligent Contracts**
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?style=for-the-badge&logo=vercel)](https://crypto-sentiment-oracle.vercel.app)
-[![View Contract](https://img.shields.io/badge/View_Contract-Explorer-8A2BE2?style=for-the-badge)](https://explorer-studio.genlayer.com/address/0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6)
+[![View Contract](https://img.shields.io/badge/View_Contract-Explorer-8A2BE2?style=for-the-badge)](https://explorer-studio.genlayer.com/address/0xE600354686fb0AB5da076e1ED21838d46c4EC054)
 [![Network](https://img.shields.io/badge/Network-GenLayer_Studionet-2563eb?style=for-the-badge)](https://studio.genlayer.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](#license)
 
-**🚀 [crypto-sentiment-oracle.vercel.app](https://crypto-sentiment-oracle.vercel.app)** · **🔍 [View on Explorer](https://explorer-studio.genlayer.com/address/0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6)**
+**🚀 [crypto-sentiment-oracle.vercel.app](https://crypto-sentiment-oracle.vercel.app)** · **🔍 [View on Explorer](https://explorer-studio.genlayer.com/address/0xE600354686fb0AB5da076e1ED21838d46c4EC054)**
 
 </div>
 
@@ -47,7 +47,7 @@ No off-chain oracle. No centralized API. The LLM call and the web fetch both hap
 
 This isn't a mockup — every result is a real, finalized transaction you can independently verify:
 
-**Contract:** [`0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6`](https://explorer-studio.genlayer.com/address/0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6) on GenLayer Studionet
+**Contract:** [`0xE600354686fb0AB5da076e1ED21838d46c4EC054`](https://explorer-studio.genlayer.com/address/0xE600354686fb0AB5da076e1ED21838d46c4EC054) on GenLayer Studionet
 
 Click through to the Explorer link above and check any `analyze_sentiment` transaction for:
 - **GenVM Result:** `SUCCESS`
@@ -100,7 +100,7 @@ Layer 0 — CONTRACT (sentiment.py)
 
 | | |
 |---|---|
-| **Contract Address** | [`0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6`](https://explorer-studio.genlayer.com/address/0x0aecf94FE53B9C269FDB38371c3628fAF424c4D6) |
+| **Contract Address** | [`0xE600354686fb0AB5da076e1ED21838d46c4EC054`](https://explorer-studio.genlayer.com/address/0xE600354686fb0AB5da076e1ED21838d46c4EC054) |
 | **Network** | GenLayer Studionet |
 | **Language** | Python (Intelligent Contract) |
 
