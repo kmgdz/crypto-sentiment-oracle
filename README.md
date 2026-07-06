@@ -64,7 +64,7 @@ Click through to the Explorer link above and check any `analyze_sentiment` trans
 Layer 2 — CLIENT
 Next.js 15 + TypeScript
 - User inputs coin name
-- Connects wallet (MetaMask) via genlayer-js
+- Signs transactions with a local App Wallet key (generated once per browser, stored in localStorage — not MetaMask)
 - Displays AI sentiment result + on-chain proof link
         ↓
 Layer 1 — PROTOCOL
@@ -89,7 +89,7 @@ Layer 0 — CONTRACT (sentiment.py)
 |-------|-----------|
 | Smart Contract | Python (GenLayer Intelligent Contract) |
 | Frontend | Next.js 15, React 19, TypeScript |
-| Wallet | MetaMask via `genlayer-js` |
+| Wallet | Local App Wallet (`genlayer-js` `createAccount()`), persisted per-browser |
 | AI Consensus | GenLayer Optimistic Democracy + LLMs |
 | Data Fetching | `gl.nondet.web.get()` (native GenLayer, no external oracle) |
 | Deployed | Vercel |
@@ -114,7 +114,8 @@ Layer 0 — CONTRACT (sentiment.py)
 | `gl.eq_principle.prompt_comparative` for the verdict | Allows subjective AI judgment with validator consensus; validators only need to agree the *conclusion* is equivalent, not that every byte of input matched |
 | CoinMarketCap as data source | Reliable, always accessible, rich crypto data |
 | Single-word response (Bullish/Bearish/Neutral) | Maximizes consensus success rate across validators |
-| Wallet-bound transactions (no throwaway keys) | Every `analyze_sentiment` call is signed by the connected MetaMask wallet, not a disposable auto-generated account, so the on-chain sender is transparent and consistent |
+| Local persistent "App Wallet" key instead of MetaMask | `genlayer-js@0.7.0`'s injected-wallet support only routes standard `eth_`-prefixed JSON-RPC methods through the browser wallet; GenLayer's actual contract-write calls don't reliably go through that path, so a MetaMask-only integration silently failed to broadcast. A local key (generated once via `createAccount()`, persisted in `localStorage`) is the officially-documented, proven-working signing method. It's clearly labeled "App Wallet" in the UI so it's never confused with a MetaMask connection. |
+| No throwaway key per click | An earlier version generated a brand-new random signing key on every single transaction — the on-chain sender changed every time and had to be funded fresh. The persistent key fixes this: same address across sessions. |
 
 ---
 
@@ -136,11 +137,12 @@ The contract is already deployed on GenLayer Studionet at the address above — 
 
 ## 🧪 How To Test
 
-1. Open the [live app](https://crypto-sentiment-oracle.vercel.app), click **Connect Wallet**, and approve MetaMask (it will prompt to add/switch to GenLayer Studionet if needed)
+1. Open the [live app](https://crypto-sentiment-oracle.vercel.app) — an "App Wallet" address is generated automatically for your browser on first load (top-right pill), no MetaMask connection required
 2. Enter a coin name (e.g. "solana") and click **Analyze Sentiment On-Chain**
-3. Confirm the transaction in MetaMask
-4. Wait roughly 30–90 seconds — the page polls automatically. It should resolve to a real Bullish/Bearish/Neutral verdict, not hang indefinitely
-5. Click the transaction hash shown — it links directly to the [GenLayer Explorer](https://explorer-studio.genlayer.com/), where you can confirm `GenVM Result: SUCCESS` and `Status: FINALIZED`
+3. Wait roughly 30–90 seconds — the page polls automatically. It should resolve to a real Bullish/Bearish/Neutral verdict, not hang indefinitely
+4. Click the transaction hash shown — it links directly to the [GenLayer Explorer](https://explorer-studio.genlayer.com/), where you can confirm `GenVM Result: SUCCESS` and `Status: FINALIZED`
+
+> Note: your App Wallet address is generated fresh the first time you load the app in a given browser, and reused after that (saved in `localStorage`). If it's a brand-new address with no GEN, GenLayer Studionet auto-funds test accounts that submit transactions — no manual faucet step should be needed.
 
 ---
 
