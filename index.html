@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Crypto Sentiment Oracle — GenLayer</title>
+<meta name="description" content="Real-time crypto sentiment analysis powered by GenLayer AI validators. Live price, market cap, and multi-timeframe momentum, judged and stored entirely on-chain."/>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 44'%3E%3Crect width='44' height='44' rx='9' fill='%2305060a'/%3E%3Ctext x='22' y='31' font-size='22' text-anchor='middle'%3E%F0%9F%94%AE%3C/text%3E%3C/svg%3E"/>
+<style>
+:root{
+  --bg:#05060a; --card:#0d1117; --card2:#111827; --border:#1f2937;
+  --text:#f5f0e8; --muted:#9ca3af; --gold:#c8a84b; --blue:#60a5fa;
+  --green:#22c55e; --red:#ef4444; --purple:#a78bfa; --mono:'SF Mono','Courier New',monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#0d1224 0%,#05060a 55%);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:20px;min-height:100vh}
+.wrap{max-width:760px;margin:0 auto;padding-top:20px}
+nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.logo{font-weight:800;font-size:1.15rem;display:flex;align-items:center;gap:8px}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:7px 16px;font-size:.8rem;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.d-ok{background:var(--green);box-shadow:0 0 8px var(--green)}
+.d-err{background:var(--red)} .d-pending{background:var(--gold);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.hero{text-align:center;margin-bottom:26px}
+.hero h1{font-size:2.1rem;margin:0 0 8px;background:linear-gradient(135deg,#fff,#c8a84b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:var(--muted);font-size:.9rem;margin:0}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;transition:border-color .2s}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{background:var(--card2);border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:999px;font-size:.82rem;cursor:pointer;transition:all .15s}
+.chip:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-1px)}
+label{display:block;color:var(--muted);font-size:.8rem;margin-bottom:6px}
+input{width:100%;background:#1f2937;color:var(--text);border:1px solid #374151;border-radius:10px;padding:12px 14px;font-size:1rem;outline:none;margin-bottom:12px;font-family:inherit;transition:border-color .15s}
+input:focus{border-color:var(--blue)}
+button{cursor:pointer;border:none;border-radius:10px;padding:13px 16px;font-size:.95rem;font-weight:600;transition:transform .1s,opacity .15s}
+button:active{transform:scale(.98)}
+.btn-main{background:linear-gradient(135deg,#60a5fa,#3b82f6);color:#fff;width:100%}
+.btn-main:disabled{background:#374151;cursor:not-allowed;opacity:.6}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);width:100%}
+.result-card{opacity:0;transform:translateY(8px);animation:riseIn .35s ease forwards}
+@keyframes riseIn{to{opacity:1;transform:translateY(0)}}
+.res-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.coin-name{font-size:1.3rem;font-weight:800;text-transform:capitalize}
+.verdict-badge{padding:6px 16px;border-radius:999px;font-weight:800;font-size:.85rem;letter-spacing:.03em}
+.v-bull{background:rgba(34,197,94,.15);color:var(--green);box-shadow:0 0 20px rgba(34,197,94,.15)}
+.v-bear{background:rgba(239,68,68,.15);color:var(--red);box-shadow:0 0 20px rgba(239,68,68,.15)}
+.v-neutral{background:rgba(200,168,75,.15);color:var(--gold)}
+.headline{font-size:1.15rem;font-weight:600;margin-bottom:14px}
+.conf-row{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.conf-track{flex:1;height:8px;background:#1f2937;border-radius:99px;overflow:hidden}
+.conf-fill{height:100%;border-radius:99px;transition:width .6s ease}
+.conf-label{font-size:.75rem;color:var(--muted);font-family:var(--mono);white-space:nowrap}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat{background:#0a0e17;border-radius:10px;padding:12px 14px}
+.stat-label{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.stat-val{font-size:1.05rem;font-weight:700;font-family:var(--mono)}
+.change-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.change-pill{padding:6px 12px;border-radius:8px;font-size:.8rem;font-weight:700;font-family:var(--mono)}
+.up{background:rgba(34,197,94,.12);color:var(--green)}
+.down{background:rgba(239,68,68,.12);color:var(--red)}
+.flat{background:rgba(156,163,175,.12);color:var(--muted)}
+.reasoning{background:#0a0e17;border-left:3px solid var(--blue);border-radius:8px;padding:12px 16px;font-size:.88rem;color:#e5e0d8;line-height:1.5}
+.tx-link{color:var(--blue);text-decoration:none;font-size:.75rem;display:block;margin-top:12px;word-break:break-all}
+.loading-wrap{text-align:center;padding:30px 0}
+.spinner{display:inline-flex;gap:6px;margin-bottom:14px}
+.spinner span{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:bounce 1.2s infinite ease-in-out}
+.spinner span:nth-child(2){animation-delay:.15s}
+.spinner span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+.loading-text{color:var(--muted);font-size:.85rem}
+.feed-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.feed-item:last-child{border:none}
+.feed-left{display:flex;align-items:center;gap:10px}
+.feed-coin{font-weight:700;text-transform:capitalize}
+.feed-badge{font-size:.68rem;padding:2px 9px;border-radius:999px;font-weight:700}
+.txlog{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 22px;margin-top:20px}
+.tx-entry{padding:7px 0;border-bottom:1px solid var(--border);font-size:.78rem;display:flex;gap:8px;align-items:flex-start;color:var(--muted)}
+.tx-entry:last-child{border:none}
+.tx-entry .dot{margin-top:5px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:.85rem;z-index:99;max-width:320px;animation:riseIn .2s ease}
+.section-title{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin:0 0 14px;font-weight:700}
+.empty{text-align:center;color:var(--muted);padding:20px 0;font-size:.85rem}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="logo">🔮 Crypto Sentiment Oracle</div>
+    <div id="wallet-area">
+      <button class="btn-ghost" id="connect-btn" onclick="connectWallet()" style="width:auto;padding:8px 16px">Connect Wallet</button>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <h1>Real-Time On-Chain Sentiment</h1>
+    <p>Live price, market cap & momentum — analyzed by GenLayer AI validators, judged entirely on-chain.</p>
+  </div>
+
+  <div class="card">
+    <label>Contract Address</label>
+    <input id="contract-input" value="0xBf0613De3880d39b07f5eb02c3a0771C70b05c6E" placeholder="0x... paste your deployed contract"/>
+    <button class="btn-ghost" onclick="loadContract()" id="load-btn">Load Contract</button>
+  </div>
+
+  <div class="card">
+    <div class="chips" id="coin-chips"></div>
+    <label>Cryptocurrency Name</label>
+    <input id="coin-input" placeholder="bitcoin, ethereum, solana..." onkeydown="if(event.key==='Enter')analyzeSentiment()"/>
+    <button class="btn-main" onclick="analyzeSentiment()" id="analyze-btn">⚡ Analyze On-Chain</button>
+  </div>
+
+  <div id="result-area"></div>
+
+  <div class="card">
+    <div class="section-title">📡 Recent Activity</div>
+    <div id="feed-area"><div class="empty">Load a contract to see recent on-chain analyses.</div></div>
+  </div>
+
+  <div class="txlog">
+    <div class="section-title" style="margin-bottom:10px">Transaction Log</div>
+    <div id="tx-entries">
+      <div class="tx-entry"><span class="dot d-pending"></span><span>Waiting for contract to load...</span></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/genlayer-js@latest";
+import { studionet } from "https://esm.sh/genlayer-js@latest/chains";
+
+const RPC = 'https://studio.genlayer.com/api';
+const PROXY_RPC = '/api/rpc';
+const CHAIN_ID = '0xf22f';
+const CHAIN_PARAMS = {
+  chainId: CHAIN_ID,
+  chainName: 'GenLayer Studionet',
+  nativeCurrency: { name: 'GEN', symbol: 'GEN', decimals: 18 },
+  rpcUrls: [RPC],
+  blockExplorerUrls: ['https://explorer-studio.genlayer.com']
+};
+const COINS = ['bitcoin','ethereum','solana','dogecoin','ripple','binancecoin','cardano','avalanche-2','chainlink','polkadot'];
+
+let walletAddr = null;
+let contractAddr = '';
+let client = createClient({ chain: studionet, endpoint: PROXY_RPC });
+
+function toast(msg, type='ok') {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.borderLeft = '3px solid ' + (type==='err' ? 'var(--red)' : type==='info' ? 'var(--blue)' : 'var(--green)');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+function logTx(type, msg, hash) {
+  const el = document.getElementById('tx-entries');
+  const dotClass = type === 'ok' ? 'd-ok' : type === 'err' ? 'd-err' : 'd-pending';
+  const entry = document.createElement('div');
+  entry.className = 'tx-entry';
+  entry.innerHTML = `<span class="dot ${dotClass}"></span><span>${msg}${hash ? ' — <a class="tx-link" style="display:inline;margin:0" href="https://explorer-studio.genlayer.com/tx/'+hash+'" target="_blank">'+hash.slice(0,10)+'...</a>' : ''}</span>`;
+  el.prepend(entry);
+}
+function fmtUsd(n) {
+  if (n === null || n === undefined || n === 'None') return '—';
+  n = Number(n);
+  if (isNaN(n)) return '—';
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(2) + 'K';
+  if (n >= 1) return '$' + n.toFixed(2);
+  return '$' + n.toPrecision(4);
+}
+function fmtPct(n) {
+  if (n === null || n === undefined || n === 'None') return { text: '—', cls: 'flat' };
+  n = Number(n);
+  if (isNaN(n)) return { text: '—', cls: 'flat' };
+  const cls = n > 0.5 ? 'up' : n < -0.5 ? 'down' : 'flat';
+  const arrow = n > 0.5 ? '▲' : n < -0.5 ? '▼' : '●';
+  return { text: arrow + ' ' + Math.abs(n).toFixed(2) + '%', cls };
+}
+
+// Render trending coin chips
+document.getElementById('coin-chips').innerHTML = COINS.map(c =>
+  `<span class="chip" onclick="document.getElementById('coin-input').value='${c}'">${c}</span>`
+).join('');
+
+async function ensureNetwork() {
+  if (!window.ethereum) throw new Error('No wallet found. Install MetaMask.');
+  try {
+    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_ID }] });
+  } catch (e) {
+    if (e.code === 4902 || e.code === -32603) {
+      await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [CHAIN_PARAMS] });
+    } else { throw e; }
+  }
+}
+
+window.connectWallet = async function() {
+  if (!window.ethereum) { toast('No wallet found. Install MetaMask.', 'err'); return; }
+  const btn = document.getElementById('connect-btn');
+  btn.textContent = 'Connecting...'; btn.disabled = true;
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    walletAddr = accounts[0];
+    await ensureNetwork();
+    client = createClient({ chain: studionet, endpoint: PROXY_RPC, account: walletAddr });
+    document.getElementById('wallet-area').innerHTML =
+      `<span class="wallet-pill"><span class="dot d-ok"></span>${walletAddr.slice(0,6)}...${walletAddr.slice(-4)}</span>`;
+    toast('Wallet connected!');
+    logTx('ok', 'Connected: ' + walletAddr);
+  } catch (e) {
+    toast(e.message || 'Failed to connect', 'err');
+    btn.textContent = 'Connect Wallet'; btn.disabled = false;
+  }
+};
+
+async function viewCall(method, args=[]) {
+  return await client.readContract({ address: contractAddr, functionName: method, args: args || [] });
+}
+async function sendTx(method, args=[]) {
+  if (!walletAddr) { toast('Connect wallet first', 'info'); return null; }
+  await ensureNetwork();
+  return await client.writeContract({ address: contractAddr, functionName: method, args: args || [], value: 0n });
+}
+
+window.loadContract = async function() {
+  const addr = document.getElementById('contract-input').value.trim();
+  if (!addr.startsWith('0x')) { toast('Invalid address', 'err'); return; }
+  contractAddr = addr;
+  const btn = document.getElementById('load-btn');
+  btn.textContent = 'Loading...'; btn.disabled = true;
+  try {
+    await loadFeed();
+    toast('Contract loaded!');
+    logTx('ok', 'Contract loaded: ' + addr.slice(0,14) + '...');
+  } catch (e) {
+    toast('Load failed: ' + (e.message || e), 'err');
+    logTx('err', 'Load failed: ' + (e.message || ''));
+  }
+  btn.textContent = 'Load Contract'; btn.disabled = false;
+};
+
+async function loadFeed() {
+  const raw = await viewCall('get_recent_analyses', [10]);
+  const items = JSON.parse(raw);
+  const el = document.getElementById('feed-area');
+  if (!items.length) { el.innerHTML = '<div class="empty">No analyses yet — be the first!</div>'; return; }
+  el.innerHTML = items.map(it => {
+    const vClass = it.verdict === 'Bullish' ? 'v-bull' : it.verdict === 'Bearish' ? 'v-bear' : 'v-neutral';
+    return `<div class="feed-item">
+      <div class="feed-left">
+        <span class="feed-coin">${escapeHtml(it.coin)}</span>
+        <span style="color:var(--muted);font-size:.75rem">by ${it.requester.slice(0,6)}...</span>
+      </div>
+      <span class="feed-badge ${vClass}">${it.verdict} · ${it.confidence}%</span>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+window.analyzeSentiment = async function() {
+  const coin = document.getElementById('coin-input').value.trim();
+  if (!coin) { toast('Enter a coin name', 'info'); return; }
+  if (!contractAddr) { toast('Load a contract first', 'info'); return; }
+  if (!walletAddr) { toast('Connect wallet first', 'info'); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  const resultArea = document.getElementById('result-area');
+  resultArea.innerHTML = `
+    <div class="card loading-wrap">
+      <div class="spinner"><span></span><span></span><span></span></div>
+      <div class="loading-text" id="loading-msg">Sending transaction...</div>
+    </div>`;
+
+  logTx('pending', 'Analyzing "' + coin + '"...');
+  try {
+    const hash = await sendTx('analyze_sentiment', [coin]);
+    document.getElementById('loading-msg').textContent = 'AI validators are researching... (30–90s)';
+    logTx('pending', 'Waiting for consensus...', hash);
+    toast('Transaction sent! Waiting for AI consensus...', 'info');
+    pollResult(coin, hash);
+  } catch (e) {
+    resultArea.innerHTML = `<div class="card"><p style="color:var(--red)">❌ ${escapeHtml(e.message || String(e))}</p></div>`;
+    toast('Failed: ' + (e.message || e), 'err');
+    logTx('err', 'Analysis failed: ' + (e.message || ''));
+    btn.disabled = false;
+  }
+};
+
+async function pollResult(coin, txHash) {
+  let tries = 0;
+  const poll = async () => {
+    tries++;
+    try {
+      const raw = await viewCall('get_latest_for_coin', [coin]);
+      const data = JSON.parse(raw);
+      renderResult(data, txHash);
+      logTx('ok', 'Verdict: ' + data.verdict + ' (' + data.confidence + '% confidence)', txHash);
+      toast('Analysis complete!');
+      document.getElementById('analyze-btn').disabled = false;
+      loadFeed();
+      return;
+    } catch {}
+    if (tries < 24) setTimeout(poll, 5000);
+    else {
+      document.getElementById('loading-msg').textContent = 'Still processing — this is taking longer than usual.';
+      document.getElementById('analyze-btn').disabled = false;
+    }
+  };
+  setTimeout(poll, 6000);
+}
+
+function renderResult(d, txHash) {
+  const vClass = d.verdict === 'Bullish' ? 'v-bull' : d.verdict === 'Bearish' ? 'v-bear' : 'v-neutral';
+  const confColor = d.confidence >= 70 ? 'var(--green)' : d.confidence >= 40 ? 'var(--gold)' : 'var(--muted)';
+  const c24 = fmtPct(d.change_24h), c7 = fmtPct(d.change_7d), c30 = fmtPct(d.change_30d);
+
+  document.getElementById('result-area').innerHTML = `
+  <div class="card result-card">
+    <div class="res-top">
+      <span class="coin-name">${escapeHtml(d.coin)}</span>
+      <span class="verdict-badge ${vClass}">${d.verdict}</span>
+    </div>
+    ${d.headline ? `<div class="headline">${escapeHtml(d.headline)}</div>` : ''}
+    <div class="conf-row">
+      <div class="conf-track"><div class="conf-fill" style="width:${d.confidence}%;background:${confColor}"></div></div>
+      <span class="conf-label">${d.confidence}% confidence</span>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-label">Price</div><div class="stat-val">${fmtUsd(d.price)}</div></div>
+      <div class="stat"><div class="stat-label">Market Cap ${d.rank ? '· Rank #'+d.rank : ''}</div><div class="stat-val">${fmtUsd(d.market_cap)}</div></div>
+      <div class="stat"><div class="stat-label">24h Volume</div><div class="stat-val">${fmtUsd(d.volume_24h)}</div></div>
+      <div class="stat"><div class="stat-label">From All-Time High</div><div class="stat-val">${fmtPct(d.ath_change_pct).text}</div></div>
+    </div>
+    <div class="change-row">
+      <span class="change-pill ${c24.cls}">24h ${c24.text}</span>
+      <span class="change-pill ${c7.cls}">7d ${c7.text}</span>
+      <span class="change-pill ${c30.cls}">30d ${c30.text}</span>
+    </div>
+    ${d.reasoning ? `<div class="reasoning">${escapeHtml(d.reasoning)}</div>` : ''}
+    <a class="tx-link" href="https://explorer-studio.genlayer.com/tx/${txHash}" target="_blank">🔗 View on GenLayer Explorer: ${txHash.slice(0,20)}...</a>
+  </div>`;
+}
+
+// Auto-load the pre-filled contract on page load for a smoother first run.
+window.addEventListener('DOMContentLoaded', () => {
+  const addr = document.getElementById('contract-input').value.trim();
+  if (addr.startsWith('0x')) setTimeout(() => window.loadContract(), 600);
+});
+</script>
+</body>
+</html>
