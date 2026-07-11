@@ -4,7 +4,7 @@
 
 **Multi-timeframe, on-chain crypto sentiment — analyzed and judged entirely by GenLayer AI validators**
 
-**🎮 Deployed Contract:** [`0xBf0613De3880d39b07f5eb02c3a0771C70b05c6E`](https://explorer-studio.genlayer.com/address/0xBf0613De3880d39b07f5eb02c3a0771C70b05c6E) on GenLayer Studionet
+**🎮 Deployed Contract:** [`0x4236EA1FC3be02fcc4F94b82416B8ab247d1B018`](https://explorer-studio.genlayer.com/address/0x4236EA1FC3be02fcc4F94b82416B8ab247d1B018) on GenLayer Studionet
 
 </div>
 
@@ -124,6 +124,11 @@ vercel dev
 
 ## Honesty Note
 
-The contract is deployed and confirmed live on GenLayer Studionet — `GenVM Result: SUCCESS`, `Consensus: Accepted`, `Status: FINALIZED` (see the address link above). Getting a clean deploy took a real debugging round: an earlier version used two `TreeMap` storage fields with distinct, non-repeating type shapes, which triggered a GenVM storage-descriptor error (`Is right the same storage type?`) — this version uses a single `TreeMap` field instead, matching the pattern already proven to work across this project's other contracts.
+The contract is deployed and confirmed live on GenLayer Studionet — `GenVM Result: SUCCESS`, `Consensus: Accepted`, `Status: FINALIZED` (see the address link above).
 
-What's still unverified: the `analyze_sentiment` write flow hasn't been exercised live yet — actual on-chain behavior (consensus timing, CoinGecko rate limits under real use, exact LLM output consistency across validators) can only be confirmed by actually calling it. That's the next thing to test.
+Two real issues were found and fixed through live testing, not just code review:
+
+1. **A GenVM storage bug on deploy:** an earlier version used two `TreeMap` storage fields with distinct, non-repeating type shapes, which triggered a storage-descriptor error (`Is right the same storage type?`). Fixed by using a single `TreeMap` field, matching the pattern proven to work across this project's other contracts.
+2. **A data-accuracy bug found by actually calling `analyze_sentiment` live:** CoinGecko's free, keyless API has a tight rate limit (roughly 5-15 calls/minute), and each analysis triggers multiple validators fetching the same URL independently for consensus. Hitting that limit made valid coins (e.g. "solana") incorrectly report "Coin not found." Fixed by distinguishing a genuine empty/invalid response from a rate-limit error response, with an accurate message for each. If you're testing multiple coins, space out requests by 30-60 seconds to avoid the free tier's rate limit.
+
+What's still worth verifying: LLM verdict consistency across validators over many different coins, and behavior under sustained real-world traffic rather than a single test session.
