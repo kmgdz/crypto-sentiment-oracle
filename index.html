@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Crypto Sentiment Oracle — GenLayer</title>
 <meta name="description" content="Real-time crypto sentiment analysis powered by GenLayer AI validators. Live price, market cap, and multi-timeframe momentum, judged and stored entirely on-chain."/>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 44'%3E%3Crect width='44' height='44' rx='9' fill='%2305060a'/%3E%3Ctext x='22' y='31' font-size='22' text-anchor='middle'%3E%F0%9F%94%AE%3C/text%3E%3C/svg%3E"/>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2044%2044%22%3E%0A%20%20%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%2244%22%20height%3D%2244%22%20rx%3D%229%22%20fill%3D%22%2305060a%22/%3E%0A%20%20%3Cpolygon%20points%3D%2222%2C5%2037%2C13.5%2037%2C30.5%2022%2C39%207%2C30.5%207%2C13.5%22%20stroke%3D%22%23c8a84b%22%20stroke-width%3D%221.4%22%20fill%3D%22none%22/%3E%0A%20%20%3Cpolygon%20points%3D%2222%2C10%2033%2C16.5%2033%2C27.5%2022%2C34%2011%2C27.5%2011%2C16.5%22%20fill%3D%22rgba%2896%2C165%2C250%2C0.10%29%22/%3E%0A%20%20%3Ccircle%20cx%3D%2222%22%20cy%3D%2222%22%20r%3D%227.5%22%20fill%3D%22%23a78bfa%22%20opacity%3D%220.85%22/%3E%0A%20%20%3Ccircle%20cx%3D%2219.5%22%20cy%3D%2219%22%20r%3D%222.3%22%20fill%3D%22%23ffffff%22%20opacity%3D%220.55%22/%3E%0A%20%20%3Cellipse%20cx%3D%2222%22%20cy%3D%2231.5%22%20rx%3D%228.5%22%20ry%3D%221.6%22%20fill%3D%22%23c8a84b%22%20opacity%3D%220.35%22/%3E%0A%20%20%3Ccircle%20cx%3D%2222%22%20cy%3D%225%22%20r%3D%221.6%22%20fill%3D%22%23c8a84b%22/%3E%0A%20%20%3Ccircle%20cx%3D%2237%22%20cy%3D%2213.5%22%20r%3D%221.2%22%20fill%3D%22%23c8a84b%22%20opacity%3D%22.5%22/%3E%0A%20%20%3Ccircle%20cx%3D%2237%22%20cy%3D%2230.5%22%20r%3D%221.2%22%20fill%3D%22%23c8a84b%22%20opacity%3D%22.5%22/%3E%0A%20%20%3Ccircle%20cx%3D%2222%22%20cy%3D%2239%22%20r%3D%221.2%22%20fill%3D%22%23c8a84b%22%20opacity%3D%22.3%22/%3E%0A%20%20%3Ccircle%20cx%3D%227%22%20cy%3D%2230.5%22%20r%3D%221.2%22%20fill%3D%22%23c8a84b%22%20opacity%3D%22.5%22/%3E%0A%20%20%3Ccircle%20cx%3D%227%22%20cy%3D%2213.5%22%20r%3D%221.2%22%20fill%3D%22%23c8a84b%22%20opacity%3D%22.5%22/%3E%0A%3C/svg%3E"/>
 <style>
 :root{
   --bg:#05060a; --card:#0d1117; --card2:#111827; --border:#1f2937;
@@ -16,7 +16,8 @@
 body{margin:0;background:radial-gradient(ellipse at top,#0d1224 0%,#05060a 55%);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:20px;min-height:100vh}
 .wrap{max-width:760px;margin:0 auto;padding-top:20px}
 nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
-.logo{font-weight:800;font-size:1.15rem;display:flex;align-items:center;gap:8px}
+.logo{font-weight:800;font-size:1.15rem;display:flex;align-items:center;gap:10px;letter-spacing:.01em}
+.logo svg{width:34px;height:34px;flex-shrink:0;filter:drop-shadow(0 0 6px rgba(167,139,250,.35))}
 .wallet-pill{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:7px 16px;font-size:.8rem;color:var(--muted)}
 .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .d-ok{background:var(--green);box-shadow:0 0 8px var(--green)}
@@ -25,18 +26,33 @@ nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:
 .hero{text-align:center;margin-bottom:26px}
 .hero h1{font-size:2.1rem;margin:0 0 8px;background:linear-gradient(135deg,#fff,#c8a84b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .hero p{color:var(--muted);font-size:.9rem;margin:0}
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;transition:border-color .2s}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;transition:border-color .2s,box-shadow .2s}
+.card:hover{border-color:#2a3548}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
 .chip{background:var(--card2);border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:999px;font-size:.82rem;cursor:pointer;transition:all .15s}
 .chip:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-1px)}
+.chip.active{background:rgba(167,139,250,.15);border-color:var(--purple);color:var(--purple)}
 label{display:block;color:var(--muted);font-size:.8rem;margin-bottom:6px}
-input{width:100%;background:#1f2937;color:var(--text);border:1px solid #374151;border-radius:10px;padding:12px 14px;font-size:1rem;outline:none;margin-bottom:12px;font-family:inherit;transition:border-color .15s}
+input{width:100%;background:#1f2937;color:var(--text);border:1px solid #374151;border-radius:10px;padding:12px 14px;font-size:1rem;outline:none;margin-bottom:0;font-family:inherit;transition:border-color .15s}
 input:focus{border-color:var(--blue)}
+.search-wrap{position:relative;margin-bottom:14px}
+.search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:.9rem}
+.search-wrap input{padding-left:38px}
+.dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#151b28;border:1px solid var(--border);border-radius:12px;max-height:280px;overflow-y:auto;z-index:20;box-shadow:0 10px 30px rgba(0,0,0,.5);display:none}
+.dropdown.show{display:block}
+.dd-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background .1s}
+.dd-item:hover,.dd-item.hi{background:rgba(96,165,250,.1)}
+.dd-thumb{width:22px;height:22px;border-radius:50%;flex-shrink:0;background:#1f2937}
+.dd-name{font-weight:600;font-size:.88rem}
+.dd-symbol{color:var(--muted);font-size:.75rem;text-transform:uppercase}
+.dd-rank{margin-left:auto;color:var(--muted);font-size:.7rem;font-family:var(--mono)}
+.dd-empty{padding:14px;text-align:center;color:var(--muted);font-size:.82rem}
 button{cursor:pointer;border:none;border-radius:10px;padding:13px 16px;font-size:.95rem;font-weight:600;transition:transform .1s,opacity .15s}
 button:active{transform:scale(.98)}
-.btn-main{background:linear-gradient(135deg,#60a5fa,#3b82f6);color:#fff;width:100%}
-.btn-main:disabled{background:#374151;cursor:not-allowed;opacity:.6}
+.btn-main{background:linear-gradient(135deg,#60a5fa,#3b82f6);color:#fff;width:100%;margin-top:14px}
+.btn-main:disabled{background:#374151;cursor:not-allowed;opacity:.65}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);width:100%}
+.cooldown-note{text-align:center;color:var(--muted);font-size:.75rem;margin-top:8px}
 .result-card{opacity:0;transform:translateY(8px);animation:riseIn .35s ease forwards}
 @keyframes riseIn{to{opacity:1;transform:translateY(0)}}
 .res-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
@@ -80,13 +96,25 @@ button:active{transform:scale(.98)}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:.85rem;z-index:99;max-width:320px;animation:riseIn .2s ease}
 .section-title{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin:0 0 14px;font-weight:700}
 .empty{text-align:center;color:var(--muted);padding:20px 0;font-size:.85rem}
+footer{text-align:center;color:#4b5563;font-size:.72rem;margin-top:24px;padding-bottom:10px}
+footer a{color:var(--muted)}
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <nav>
-    <div class="logo">🔮 Crypto Sentiment Oracle</div>
+    <div class="logo">
+      <svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+        <rect width="44" height="44" rx="9" fill="#05060a"/>
+        <polygon points="22,5 37,13.5 37,30.5 22,39 7,30.5 7,13.5" stroke="#c8a84b" stroke-width="1.4" fill="none"/>
+        <polygon points="22,10 33,16.5 33,27.5 22,34 11,27.5 11,16.5" fill="rgba(96,165,250,0.10)"/>
+        <circle cx="22" cy="22" r="7.5" fill="#a78bfa" opacity="0.85"/>
+        <circle cx="19.5" cy="19" r="2.3" fill="#fff" opacity="0.55"/>
+        <ellipse cx="22" cy="31.5" rx="8.5" ry="1.6" fill="#c8a84b" opacity="0.35"/>
+      </svg>
+      Crypto Sentiment Oracle
+    </div>
     <div id="wallet-area">
       <button class="btn-ghost" id="connect-btn" onclick="connectWallet()" style="width:auto;padding:8px 16px">Connect Wallet</button>
     </div>
@@ -99,15 +127,20 @@ button:active{transform:scale(.98)}
 
   <div class="card">
     <label>Contract Address</label>
-    <input id="contract-input" value="0xBf0613De3880d39b07f5eb02c3a0771C70b05c6E" placeholder="0x... paste your deployed contract"/>
-    <button class="btn-ghost" onclick="loadContract()" id="load-btn">Load Contract</button>
+    <input id="contract-input" value="0x4236EA1FC3be02fcc4F94b82416B8ab247d1B018" placeholder="0x... paste your deployed contract"/>
+    <button class="btn-ghost" onclick="loadContract()" id="load-btn" style="margin-top:10px">Load Contract</button>
   </div>
 
   <div class="card">
     <div class="chips" id="coin-chips"></div>
-    <label>Cryptocurrency Name</label>
-    <input id="coin-input" placeholder="bitcoin, ethereum, solana..." onkeydown="if(event.key==='Enter')analyzeSentiment()"/>
+    <label>Search Any Cryptocurrency</label>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input id="coin-input" placeholder="Search by name or ticker — e.g. Bitcoin, ETH, dogecoin..." autocomplete="off"/>
+      <div class="dropdown" id="search-dropdown"></div>
+    </div>
     <button class="btn-main" onclick="analyzeSentiment()" id="analyze-btn">⚡ Analyze On-Chain</button>
+    <div class="cooldown-note" id="cooldown-note"></div>
   </div>
 
   <div id="result-area"></div>
@@ -123,6 +156,8 @@ button:active{transform:scale(.98)}
       <div class="tx-entry"><span class="dot d-pending"></span><span>Waiting for contract to load...</span></div>
     </div>
   </div>
+
+  <footer>Built on <a href="https://genlayer.com" target="_blank">GenLayer</a> · Market data from <a href="https://coingecko.com" target="_blank">CoinGecko</a></footer>
 </div>
 
 <script type="module">
@@ -140,10 +175,16 @@ const CHAIN_PARAMS = {
   blockExplorerUrls: ['https://explorer-studio.genlayer.com']
 };
 const COINS = ['bitcoin','ethereum','solana','dogecoin','ripple','binancecoin','cardano','avalanche-2','chainlink','polkadot'];
+const COOLDOWN_SECONDS = 20; // spaces out analyses to stay under CoinGecko's free rate limit
 
 let walletAddr = null;
 let contractAddr = '';
+let selectedCoinId = '';
 let client = createClient({ chain: studionet, endpoint: PROXY_RPC });
+let cooldownTimer = null;
+let searchDebounce = null;
+let ddItems = [];
+let ddIndex = -1;
 
 function toast(msg, type='ok') {
   const t = document.createElement('div');
@@ -179,12 +220,88 @@ function fmtPct(n) {
   const arrow = n > 0.5 ? '▲' : n < -0.5 ? '▼' : '●';
   return { text: arrow + ' ' + Math.abs(n).toFixed(2) + '%', cls };
 }
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
 
-// Render trending coin chips
-document.getElementById('coin-chips').innerHTML = COINS.map(c =>
-  `<span class="chip" onclick="document.getElementById('coin-input').value='${c}'">${c}</span>`
-).join('');
+// ── Trending chips
+function renderChips() {
+  document.getElementById('coin-chips').innerHTML = COINS.map(c =>
+    `<span class="chip ${c===selectedCoinId?'active':''}" data-coin="${c}" onclick="selectCoin('${c}','${c}')">${c}</span>`
+  ).join('');
+}
+renderChips();
 
+window.selectCoin = function(id, label) {
+  selectedCoinId = id;
+  document.getElementById('coin-input').value = label;
+  document.getElementById('search-dropdown').classList.remove('show');
+  renderChips();
+};
+
+// ── Live search autocomplete (CoinGecko /search — a single lightweight
+// client-side call per keystroke, debounced; not subject to the tight
+// validator-side rate limit used for actual on-chain analysis).
+const searchInput = document.getElementById('coin-input');
+const dropdown = document.getElementById('search-dropdown');
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim();
+  selectedCoinId = '';
+  renderChips();
+  clearTimeout(searchDebounce);
+  if (q.length < 2) { dropdown.classList.remove('show'); return; }
+  searchDebounce = setTimeout(() => runSearch(q), 350);
+});
+searchInput.addEventListener('keydown', (e) => {
+  if (!dropdown.classList.contains('show')) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); ddIndex = Math.min(ddIndex+1, ddItems.length-1); highlightDd(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); ddIndex = Math.max(ddIndex-1, 0); highlightDd(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (ddIndex>=0 && ddItems[ddIndex]) pickDd(ddItems[ddIndex]); else analyzeSentiment(); }
+  else if (e.key === 'Escape') { dropdown.classList.remove('show'); }
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-wrap')) dropdown.classList.remove('show');
+});
+
+function highlightDd() {
+  [...dropdown.children].forEach((el,i) => el.classList.toggle('hi', i===ddIndex));
+}
+function pickDd(item) {
+  selectedCoinId = item.id;
+  searchInput.value = item.name;
+  dropdown.classList.remove('show');
+  renderChips();
+}
+
+async function runSearch(q) {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/search?query=' + encodeURIComponent(q));
+    const data = await res.json();
+    const coins = (data.coins || []).slice(0, 8);
+    ddItems = coins;
+    ddIndex = -1;
+    if (!coins.length) {
+      dropdown.innerHTML = '<div class="dd-empty">No matching coins found</div>';
+    } else {
+      dropdown.innerHTML = coins.map(c => `
+        <div class="dd-item" data-id="${c.id}">
+          <img class="dd-thumb" src="${c.thumb}" onerror="this.style.visibility='hidden'"/>
+          <span class="dd-name">${escapeHtml(c.name)}</span>
+          <span class="dd-symbol">${escapeHtml(c.symbol)}</span>
+          ${c.market_cap_rank ? '<span class="dd-rank">#'+c.market_cap_rank+'</span>' : ''}
+        </div>`).join('');
+      [...dropdown.children].forEach((el, i) => el.addEventListener('click', () => pickDd(coins[i])));
+    }
+    dropdown.classList.add('show');
+  } catch (e) {
+    dropdown.classList.remove('show');
+  }
+}
+
+// ── Wallet
 async function ensureNetwork() {
   if (!window.ethereum) throw new Error('No wallet found. Install MetaMask.');
   try {
@@ -258,15 +375,29 @@ async function loadFeed() {
   }).join('');
 }
 
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s || '';
-  return d.innerHTML;
+function startCooldown() {
+  const btn = document.getElementById('analyze-btn');
+  const note = document.getElementById('cooldown-note');
+  let remaining = COOLDOWN_SECONDS;
+  btn.disabled = true;
+  clearInterval(cooldownTimer);
+  cooldownTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(cooldownTimer);
+      note.textContent = '';
+      btn.disabled = false;
+    } else {
+      note.textContent = `Please wait ${remaining}s before analyzing again — avoids CoinGecko's free-tier rate limit`;
+    }
+  }, 1000);
+  note.textContent = `Please wait ${remaining}s before analyzing again — avoids CoinGecko's free-tier rate limit`;
 }
 
 window.analyzeSentiment = async function() {
-  const coin = document.getElementById('coin-input').value.trim();
-  if (!coin) { toast('Enter a coin name', 'info'); return; }
+  const typed = document.getElementById('coin-input').value.trim();
+  const coin = selectedCoinId || typed;
+  if (!coin) { toast('Search and select a coin first', 'info'); return; }
   if (!contractAddr) { toast('Load a contract first', 'info'); return; }
   if (!walletAddr) { toast('Connect wallet first', 'info'); return; }
 
@@ -304,14 +435,14 @@ async function pollResult(coin, txHash) {
       renderResult(data, txHash);
       logTx('ok', 'Verdict: ' + data.verdict + ' (' + data.confidence + '% confidence)', txHash);
       toast('Analysis complete!');
-      document.getElementById('analyze-btn').disabled = false;
+      startCooldown();
       loadFeed();
       return;
     } catch {}
     if (tries < 24) setTimeout(poll, 5000);
     else {
       document.getElementById('loading-msg').textContent = 'Still processing — this is taking longer than usual.';
-      document.getElementById('analyze-btn').disabled = false;
+      startCooldown();
     }
   };
   setTimeout(poll, 6000);

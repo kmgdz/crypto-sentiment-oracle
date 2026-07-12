@@ -48,7 +48,29 @@ class CryptoSentimentOracle(gl.Contract):
             try:
                 parsed = json.loads(raw_body)
             except Exception:
-                parsed = []
+                parsed = None
+
+            # CoinGecko's keyless public API has a tight rate limit
+            # (roughly 5-15 calls/minute). When it's hit, the response is
+            # an error object like {"status": {"error_code": 429, ...}},
+            # not the expected price array — distinguish that from a
+            # genuinely empty result (coin ID not recognized), since
+            # treating both the same way misleadingly reports valid coins
+            # as "not found" during normal, moderately frequent use.
+            if isinstance(parsed, dict):
+                status = parsed.get("status", {})
+                err_code = status.get("error_code") if isinstance(status, dict) else None
+                return json.dumps({
+                    "verdict": "Neutral",
+                    "confidence": 0,
+                    "headline": "Data temporarily unavailable",
+                    "reasoning": "CoinGecko's free API is rate-limited right now"
+                        + (" (error " + str(err_code) + ")" if err_code else "")
+                        + " — please wait a minute and try again.",
+                    "price": None, "market_cap": None, "volume_24h": None,
+                    "change_24h": None, "change_7d": None, "change_30d": None,
+                    "rank": None, "ath_change_pct": None,
+                })
 
             if not parsed or not isinstance(parsed, list):
                 return json.dumps({

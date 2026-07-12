@@ -47,10 +47,21 @@ The very first version of this app scraped CoinMarketCap's HTML directly, which 
 
 ---
 
+### 6. A real coin search, not a guessing game
+Instead of typing a raw CoinGecko ID and hoping it's right, the app now has a live search box (powered by CoinGecko's `/search` endpoint) — type a name or ticker, get a dropdown of real matches with icons, symbols, and market cap rank, and click to select. Trending coin chips are still there for one-click access to the most common ones. This search call is a single lightweight client-side request per keystroke (debounced), separate from and much lighter than the on-chain analysis fetch.
+
+### 7. A cooldown that actually prevents the rate-limit issue, not just reports it
+Live testing surfaced a real bug: CoinGecko's free, keyless API allows only ~5-15 calls/minute, and each on-chain analysis triggers multiple validators fetching independently — so a few analyses in quick succession could exhaust that limit and cause valid coins to (correctly, but unhelpfully) report "temporarily rate-limited." The contract fix distinguishes that case from a genuinely invalid coin ID; the frontend now goes a step further and enforces a 20-second cooldown on the Analyze button after each use, so the tool itself keeps you within the free tier instead of just explaining after the fact why it failed.
+
+### 8. A proper visual identity
+A custom hexagon-and-crystal-ball logo (matching the same design language as this project's sibling apps) now appears as both the in-page logo and the browser tab favicon — embedded directly as inline SVG / a data URI, no extra image files to host.
+
+
+
 ## How It Works
 
 1. **Connect your wallet** — MetaMask, prompts to add/switch to GenLayer Studionet automatically
-2. **Pick a coin** — click a trending chip (Bitcoin, Ethereum, Solana, etc.) or type any CoinGecko coin ID
+2. **Pick a coin** — search by name/ticker in the live search box, click a trending chip, or type a CoinGecko coin ID directly
 3. **Analyze on-chain** — `analyze_sentiment(coin)` fetches live market data and runs it through GenLayer's AI validators
 4. **Consensus via the Equivalence Principle** — fetching the market data and judging it both happen inside one non-deterministic block, checked with a single `prompt_comparative` call, so validators only need to agree on the final structured verdict — not on byte-identical API responses
 5. **Result appears** — verdict, confidence, live price/market cap/volume, and multi-timeframe momentum, all pulled from what's actually stored on-chain
@@ -111,14 +122,14 @@ vercel dev
 
 ## How To Test
 
-1. Open the live app and click **Connect Wallet**
-2. Paste your deployed contract address and click **Load Contract**
-3. Click a trending coin chip (or type any CoinGecko coin ID, e.g. `bitcoin`, `ethereum`, `solana`, `dogecoin`, `chainlink`)
-4. Click **⚡ Analyze On-Chain**, confirm in your wallet
-5. Wait ~30–90 seconds for validator consensus — a loading indicator shows progress
-6. Confirm the result shows real, varied numbers (price, market cap, volume, multi-timeframe % changes) — not the same static output every time
+1. Open the live app (the contract auto-loads on page open) and click **Connect Wallet**
+2. Try the search box — type a name or ticker (e.g. "eth", "doge") and confirm a dropdown of real matching coins appears, or click a trending chip
+3. Click **⚡ Analyze On-Chain**, confirm in your wallet
+4. Wait ~30–90 seconds for validator consensus — a loading indicator shows progress
+5. Confirm the result shows real, varied numbers (price, market cap, volume, multi-timeframe % changes) — not the same static output every time
+6. Notice the Analyze button is disabled with a countdown for ~20 seconds after each analysis — this is intentional, it keeps you within CoinGecko's free-tier rate limit
 7. Click the transaction link — it should show `GenVM Result: SUCCESS`, `Consensus: Accepted`, `Status: FINALIZED` on the [GenLayer Explorer](https://explorer-studio.genlayer.com/)
-8. Analyze a second coin, then refresh — confirm the "Recent Activity" feed shows both
+8. Analyze a second coin (after the cooldown), then refresh — confirm the "Recent Activity" feed shows both
 
 ---
 
