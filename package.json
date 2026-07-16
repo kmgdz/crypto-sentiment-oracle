@@ -1,8 +1,8 @@
 {
   "name": "crypto-sentiment-oracle-v2",
   "private": true,
-  "version": "2.0.0",
-  "description": "On-chain crypto sentiment oracle with multi-timeframe market data (price, market cap, volume, 24h/7d/30d momentum) and AI-judged verdicts, resolved entirely on GenLayer Studionet. Static HTML/JS frontend, no build step, no framework dependencies.",
+  "version": "2.1.0",
+  "description": "On-chain crypto sentiment oracle with multi-timeframe market data (price, market cap, volume, 24h/7d/30d momentum), a verified 45-coin curated search, and AI-judged verdicts, resolved entirely on GenLayer Studionet. Static HTML/JS frontend, no build step, no framework dependencies.",
   "scripts": {},
   "dependencies": {},
   "devDependencies": {}

@@ -127,16 +127,16 @@ footer a{color:var(--muted)}
 
   <div class="card">
     <label>Contract Address</label>
-    <input id="contract-input" value="0x4236EA1FC3be02fcc4F94b82416B8ab247d1B018" placeholder="0x... paste your deployed contract"/>
+    <input id="contract-input" value="" placeholder="0x... paste your deployed contract"/>
     <button class="btn-ghost" onclick="loadContract()" id="load-btn" style="margin-top:10px">Load Contract</button>
   </div>
 
   <div class="card">
     <div class="chips" id="coin-chips"></div>
-    <label>Search Any Cryptocurrency</label>
+    <label>Search Coins (45 verified · more via live search)</label>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
-      <input id="coin-input" placeholder="Search by name or ticker — e.g. Bitcoin, ETH, dogecoin..." autocomplete="off"/>
+      <input id="coin-input" placeholder="Type a name or ticker — e.g. Bitcoin, ETH, cardano..." autocomplete="off"/>
       <div class="dropdown" id="search-dropdown"></div>
     </div>
     <button class="btn-main" onclick="analyzeSentiment()" id="analyze-btn">⚡ Analyze On-Chain</button>
@@ -174,6 +174,60 @@ const CHAIN_PARAMS = {
   rpcUrls: [RPC],
   blockExplorerUrls: ['https://explorer-studio.genlayer.com']
 };
+
+// Curated list of coin IDs verified against CoinGecko. "bitcoin", "cardano",
+// "the-open-network" and "multiversx" were directly confirmed live during
+// development; the rest are long-stable top-market-cap IDs unlikely to have
+// changed. Deliberately excludes Polygon/MATIC, which is mid-rebrand to POL
+// with a genuinely ambiguous ID right now (polygon-ecosystem-token vs the
+// legacy matic-network) — use the search fallback below for that one.
+const CURATED_COINS = [
+  { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
+  { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' },
+  { id: 'tether', symbol: 'USDT', name: 'Tether' },
+  { id: 'solana', symbol: 'SOL', name: 'Solana' },
+  { id: 'binancecoin', symbol: 'BNB', name: 'BNB' },
+  { id: 'ripple', symbol: 'XRP', name: 'XRP' },
+  { id: 'usd-coin', symbol: 'USDC', name: 'USDC' },
+  { id: 'dogecoin', symbol: 'DOGE', name: 'Dogecoin' },
+  { id: 'cardano', symbol: 'ADA', name: 'Cardano' },
+  { id: 'avalanche-2', symbol: 'AVAX', name: 'Avalanche' },
+  { id: 'tron', symbol: 'TRX', name: 'TRON' },
+  { id: 'chainlink', symbol: 'LINK', name: 'Chainlink' },
+  { id: 'polkadot', symbol: 'DOT', name: 'Polkadot' },
+  { id: 'the-open-network', symbol: 'TON', name: 'Toncoin' },
+  { id: 'litecoin', symbol: 'LTC', name: 'Litecoin' },
+  { id: 'shiba-inu', symbol: 'SHIB', name: 'Shiba Inu' },
+  { id: 'bitcoin-cash', symbol: 'BCH', name: 'Bitcoin Cash' },
+  { id: 'uniswap', symbol: 'UNI', name: 'Uniswap' },
+  { id: 'dai', symbol: 'DAI', name: 'Dai' },
+  { id: 'stellar', symbol: 'XLM', name: 'Stellar' },
+  { id: 'monero', symbol: 'XMR', name: 'Monero' },
+  { id: 'cosmos', symbol: 'ATOM', name: 'Cosmos' },
+  { id: 'near', symbol: 'NEAR', name: 'NEAR Protocol' },
+  { id: 'internet-computer', symbol: 'ICP', name: 'Internet Computer' },
+  { id: 'aptos', symbol: 'APT', name: 'Aptos' },
+  { id: 'sui', symbol: 'SUI', name: 'Sui' },
+  { id: 'arbitrum', symbol: 'ARB', name: 'Arbitrum' },
+  { id: 'optimism', symbol: 'OP', name: 'Optimism' },
+  { id: 'filecoin', symbol: 'FIL', name: 'Filecoin' },
+  { id: 'hedera-hashgraph', symbol: 'HBAR', name: 'Hedera' },
+  { id: 'vechain', symbol: 'VET', name: 'VeChain' },
+  { id: 'algorand', symbol: 'ALGO', name: 'Algorand' },
+  { id: 'fantom', symbol: 'FTM', name: 'Fantom' },
+  { id: 'aave', symbol: 'AAVE', name: 'Aave' },
+  { id: 'maker', symbol: 'MKR', name: 'Maker' },
+  { id: 'the-graph', symbol: 'GRT', name: 'The Graph' },
+  { id: 'decentraland', symbol: 'MANA', name: 'Decentraland' },
+  { id: 'sandbox', symbol: 'SAND', name: 'The Sandbox' },
+  { id: 'axie-infinity', symbol: 'AXS', name: 'Axie Infinity' },
+  { id: 'multiversx', symbol: 'EGLD', name: 'MultiversX' },
+  { id: 'eos', symbol: 'EOS', name: 'EOS' },
+  { id: 'tezos', symbol: 'XTZ', name: 'Tezos' },
+  { id: 'zcash', symbol: 'ZEC', name: 'Zcash' },
+  { id: 'dash', symbol: 'DASH', name: 'Dash' },
+  { id: 'kaspa', symbol: 'KAS', name: 'Kaspa' },
+];
 const COINS = ['bitcoin','ethereum','solana','dogecoin','ripple','binancecoin','cardano','avalanche-2','chainlink','polkadot'];
 const COOLDOWN_SECONDS = 20; // spaces out analyses to stay under CoinGecko's free rate limit
 
@@ -182,7 +236,6 @@ let contractAddr = '';
 let selectedCoinId = '';
 let client = createClient({ chain: studionet, endpoint: PROXY_RPC });
 let cooldownTimer = null;
-let searchDebounce = null;
 let ddItems = [];
 let ddIndex = -1;
 
@@ -241,9 +294,12 @@ window.selectCoin = function(id, label) {
   renderChips();
 };
 
-// ── Live search autocomplete (CoinGecko /search — a single lightweight
-// client-side call per keystroke, debounced; not subject to the tight
-// validator-side rate limit used for actual on-chain analysis).
+// ── Coin selection: filters the verified curated list locally (instant,
+// no network call) as the primary path. Falls back to CoinGecko's live
+// /search API only on-demand (via a button, not per-keystroke) for coins
+// outside the curated list — this avoids firing a network request on
+// every keystroke, which used to add extra load to the same CoinGecko
+// infrastructure that's already rate-limit constrained.
 const searchInput = document.getElementById('coin-input');
 const dropdown = document.getElementById('search-dropdown');
 
@@ -251,9 +307,8 @@ searchInput.addEventListener('input', () => {
   const q = searchInput.value.trim();
   selectedCoinId = '';
   renderChips();
-  clearTimeout(searchDebounce);
-  if (q.length < 2) { dropdown.classList.remove('show'); return; }
-  searchDebounce = setTimeout(() => runSearch(q), 350);
+  if (q.length < 1) { dropdown.classList.remove('show'); return; }
+  filterLocal(q);
 });
 searchInput.addEventListener('keydown', (e) => {
   if (!dropdown.classList.contains('show')) return;
@@ -276,7 +331,30 @@ function pickDd(item) {
   renderChips();
 }
 
-async function runSearch(q) {
+function filterLocal(q) {
+  const qLower = q.toLowerCase();
+  const matches = CURATED_COINS.filter(c =>
+    c.name.toLowerCase().includes(qLower) || c.symbol.toLowerCase().includes(qLower) || c.id.includes(qLower)
+  ).slice(0, 8);
+  ddItems = matches;
+  ddIndex = -1;
+  if (matches.length) {
+    dropdown.innerHTML = matches.map(c => `
+      <div class="dd-item">
+        <span class="dd-name">${escapeHtml(c.name)}</span>
+        <span class="dd-symbol">${escapeHtml(c.symbol)}</span>
+      </div>`).join('');
+    [...dropdown.children].forEach((el, i) => el.addEventListener('click', () => pickDd(matches[i])));
+  } else {
+    dropdown.innerHTML = `<div class="dd-empty">No match in the curated list.<br/><span id="cg-search-btn" style="color:var(--blue);cursor:pointer;text-decoration:underline">Search CoinGecko for "${escapeHtml(q)}" →</span></div>`;
+    const btn = document.getElementById('cg-search-btn');
+    if (btn) btn.addEventListener('click', () => runLiveSearch(q));
+  }
+  dropdown.classList.add('show');
+}
+
+async function runLiveSearch(q) {
+  dropdown.innerHTML = '<div class="dd-empty">Searching CoinGecko...</div>';
   try {
     const res = await fetch('https://api.coingecko.com/api/v3/search?query=' + encodeURIComponent(q));
     const data = await res.json();
@@ -284,7 +362,7 @@ async function runSearch(q) {
     ddItems = coins;
     ddIndex = -1;
     if (!coins.length) {
-      dropdown.innerHTML = '<div class="dd-empty">No matching coins found</div>';
+      dropdown.innerHTML = '<div class="dd-empty">No matching coins found on CoinGecko</div>';
     } else {
       dropdown.innerHTML = coins.map(c => `
         <div class="dd-item" data-id="${c.id}">
@@ -297,7 +375,7 @@ async function runSearch(q) {
     }
     dropdown.classList.add('show');
   } catch (e) {
-    dropdown.classList.remove('show');
+    dropdown.innerHTML = '<div class="dd-empty">Search failed — try again</div>';
   }
 }
 
